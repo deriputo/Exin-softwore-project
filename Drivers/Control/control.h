@@ -1,0 +1,92 @@
+#ifndef CONTROL_H
+#define CONTROL_H
+
+#include <stdint.h>
+
+typedef enum { CONTROL_AXIS_ROLL = 0, CONTROL_AXIS_PITCH = 1 } ControlAxis;
+typedef enum { CONTROL_MODE_PID = 0, CONTROL_MODE_FOLLOW = 1 } ControlMode;
+typedef enum {
+    CONTROL_FAULT_NONE = 0,
+    CONTROL_FAULT_IMU_INVALID,
+    CONTROL_FAULT_IMU_STALE,
+    CONTROL_FAULT_TIMING
+} ControlFault;
+typedef enum {
+    CONTROL_OK = 0,
+    CONTROL_BAD_ARGUMENT,
+    CONTROL_HOLD_ACTIVE,
+    CONTROL_SENSOR_UNAVAILABLE,
+    CONTROL_FAULT_LATCHED
+} ControlResult;
+
+typedef struct {
+    float roll_deg;
+    float pitch_deg;
+    uint32_t timestamp_ms;
+    uint8_t valid;
+} ControlSample;
+
+typedef struct {
+    float kp;
+    float ki;
+    float kd;
+    float deadband_deg;
+    float target_limit_deg;
+    float target_min_deg;
+    float integral_limit_deg;
+    float slew_deg_per_second;
+    float hold_output_span_deg; /* Max movement from output captured at HOLD entry. */
+    uint32_t period_ms;
+    uint32_t sample_timeout_ms;
+    uint32_t timing_timeout_ms;
+    ControlAxis axis;
+    int8_t direction; /* +1 or -1: must be checked on the real mechanism. */
+    ControlMode mode;
+    float follow_gain;
+    float follow_filter_seconds;
+} ControlConfig;
+
+typedef struct {
+    float target_deg;
+    float measured_deg;
+    float error_deg;
+    float p_term;
+    float i_term;
+    float d_term;
+    float output_angle_deg;
+    uint16_t pulse_us;
+    uint8_t hold_enabled;
+    uint8_t saturated;
+    ControlFault fault;
+} ControlSnapshot;
+
+typedef struct {
+    ControlConfig config;
+    ControlSnapshot state;
+    uint32_t last_update_ms;
+    uint32_t last_sample_ms;
+    float previous_measured;
+    float bias_angle_deg;
+    float filtered_rate_dps;
+    float follow_origin_deg;
+    float follow_displacement_deg;
+    float follow_filtered_deg;
+    float follow_accepted_deg;
+    uint8_t have_previous;
+} Control;
+
+void Control_DefaultConfig(ControlConfig *config);
+void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms);
+ControlResult Control_SetManualAngle(Control *control, int16_t angle_deg);
+/* Captures sensor and servo reference. PID capture obeys target limits;
+   FOLLOW accepts the full valid sensor range, unwraps motion and maps 1:1. */
+ControlResult Control_StartHold(Control *control, const ControlSample *sample, uint32_t now_ms);
+/* Clears fault and retains the last pulse as manual output. */
+void Control_StopHold(Control *control);
+ControlResult Control_SetTarget(Control *control, float target_deg);
+/* Main loop; updates the selected PID/FOLLOW mode on new sample/period only. */
+uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t now_ms);
+const ControlSnapshot *Control_GetSnapshot(const Control *control);
+const char *Control_FaultName(ControlFault fault);
+
+#endif

@@ -1,0 +1,16 @@
+# Generated files stay on disk; source and portable Keil configuration are tracked.
+/build/
+/tmp/
+/release/
+/backups/
+/Project/.autodebug/
+/Project/Listings/
+/Project/Objects/
+/Project/DebugConfig/
+*.uvguix.*
+*.uvprojx.autodebug.bak
+*.uvoptx.autodebug.bak
+*.log
+*.chm
+__pycache__/
+*.pyc
