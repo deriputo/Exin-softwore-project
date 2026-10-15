@@ -32,6 +32,16 @@ static uint8_t consumed_keys, alarm_previous, sleep_previous, restore_checked;
 static uint8_t standby_bus_suspended;
 static char notice[22];
 
+typedef struct {
+    IMUSample imu;
+    uint32_t at_ms, age_ms;
+    uint16_t pulse_us, calibration_count;
+    ControlFault fault;
+    char source[24];
+    uint8_t captured;
+} HoldFaultRecord;
+static HoldFaultRecord hold_fault;
+
 static void Notice(const char *text)
 {
     (void)snprintf(notice, sizeof(notice), "%s", text);
@@ -50,6 +60,45 @@ static ControlSample Sample(void)
         sample.valid = (uint8_t)(imu_sample.valid && imu_sample.calibrated);
     }
     return sample;
+}
+
+static void RecordHoldFault(const ControlSnapshot *state)
+{
+    const char *source;
+    float norm_squared, projection;
+    if (state->fault == CONTROL_FAULT_NONE) {
+        /* Preserve evidence after OFF; a successful new HOLD starts a new run. */
+        if (state->hold_enabled) { hold_fault.captured = 0; }
+        return;
+    }
+    if (hold_fault.captured) { return; }
+    memset(&hold_fault, 0, sizeof(hold_fault));
+    (void)IMU_GetSample(&hold_fault.imu);
+    hold_fault.at_ms = now;
+    hold_fault.age_ms = now - hold_fault.imu.timestamp_ms;
+    hold_fault.pulse_us = state->pulse_us;
+    hold_fault.calibration_count = IMU_GetCalibrationCount();
+    hold_fault.fault = state->fault;
+    norm_squared = hold_fault.imu.accel_x_g * hold_fault.imu.accel_x_g +
+                   hold_fault.imu.accel_y_g * hold_fault.imu.accel_y_g +
+                   hold_fault.imu.accel_z_g * hold_fault.imu.accel_z_g;
+#if IMU_MOUNT_ROTATE_X_90
+    projection = hold_fault.imu.accel_x_g * hold_fault.imu.accel_x_g +
+                 hold_fault.imu.accel_y_g * hold_fault.imu.accel_y_g;
+#else
+    projection = hold_fault.imu.accel_x_g * hold_fault.imu.accel_x_g +
+                 hold_fault.imu.accel_z_g * hold_fault.imu.accel_z_g;
+#endif
+    source = IMU_GetFaultReason();
+    if (state->fault == CONTROL_FAULT_TIMING) { source = "CONTROL_TIMING"; }
+    else if (source[0]) { /* Keep the original communication/calibration stage. */ }
+    else if (hold_fault.age_ms > IMU_STALE_MS) { source = "SAMPLE_STALE"; }
+    else if (!hold_fault.imu.calibrated) { source = "UNCALIBRATED"; }
+    else if (!(norm_squared > 0.0025f && norm_squared < 16.0f)) { source = "ACCEL_NORM"; }
+    else if (!(projection >= 0.04f)) { source = "AXIS_PROJECTION"; }
+    else { source = "CONTROL_INPUT"; }
+    (void)snprintf(hold_fault.source, sizeof(hold_fault.source), "%s", source);
+    hold_fault.captured = 1;
 }
 
 static void SyncServoEdit(void)
@@ -209,7 +258,7 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         (void)snprintf(reply, cap,
             "HELP/help\r\nTIME(hh:mm:ss)\r\nALARMn(hh:mm:ss) n=1..3\r\n"
             "ALARMn OFF|DEL\r\nALARM ?\r\nIMU ?\r\nSERVO ?\r\n"
-            "SERVO SET <0..180>\r\nSERVO HOLD ON|OFF|?\r\nSERVO TRACE ON|OFF|?\r\nIMU RAW ?\r\n");
+            "SERVO SET <0..180>\r\nSERVO HOLD ON|OFF|?\r\nSERVO TRACE ON|OFF|?\r\nIMU RAW ?\r\nIMU FAULT ?\r\n");
         break;
     case PROTOCOL_CMD_TIME_SET:
         if (first) {
@@ -277,6 +326,21 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
             (unsigned int)imu_sample.valid, (unsigned int)imu_sample.calibrated,
             (unsigned int)IMU_GetCalibrationCount(), (unsigned long)(at - imu_sample.timestamp_ms),
             IMU_GetFaultReason()[0] ? IMU_GetFaultReason() : "NONE");
+        break;
+    case PROTOCOL_CMD_IMU_FAULT_QUERY:
+        if (!hold_fault.captured) {
+            (void)snprintf(reply, cap, "LAST_FAULT=NONE\r\n"); break;
+        }
+        (void)snprintf(reply, cap,
+            "LAST_FAULT=%s AT=%lu SRC=\"%s\" AGE=%lu VALID=%u CAL=%u COUNT=%u "
+            "AX=%+ld AY=%+ld AZ=%+ld mg OUT=%uus\r\n",
+            Control_FaultName(hold_fault.fault), (unsigned long)hold_fault.at_ms,
+            hold_fault.source, (unsigned long)hold_fault.age_ms,
+            (unsigned int)hold_fault.imu.valid, (unsigned int)hold_fault.imu.calibrated,
+            (unsigned int)hold_fault.calibration_count,
+            (long)Protocol_FloatToTenths(hold_fault.imu.accel_x_g * 100.0f),
+            (long)Protocol_FloatToTenths(hold_fault.imu.accel_y_g * 100.0f),
+            (long)Protocol_FloatToTenths(hold_fault.imu.accel_z_g * 100.0f), hold_fault.pulse_us);
         break;
     case PROTOCOL_CMD_SERVO_SET:
         result = Control_SetManualAngle(&control, cmd->angle_deg);
@@ -490,6 +554,7 @@ void App_Init(uint32_t at)
     notice_until = at; notice[0] = '\0';
     boot_started = boot_done = trace_on = ui_time_pending = 0;
     consumed_keys = alarm_previous = sleep_previous = restore_checked = standby_bus_suspended = 0;
+    memset(&hold_fault, 0, sizeof(hold_fault));
     UI_Init(&ui); Control_DefaultConfig(&config);
     config.mode = APP_CONTROL_MODE;
     config.axis = APP_HOLD_AXIS;
@@ -567,6 +632,7 @@ void App_Process(uint32_t at)
     }
     sample = Sample(); ServoPWM_SetPulseUs(Control_Update(&control, &sample, at));
     s = Control_GetSnapshot(&control);
+    RecordHoldFault(s);
     Trace();
     if (!boot_done) { busy |= POWER_BUSY_STARTUP; }
     if (RTCClock_GetActiveAlarmMask()) { busy |= POWER_BUSY_ALARM; }

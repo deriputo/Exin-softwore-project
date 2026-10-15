@@ -21,6 +21,8 @@ Protocol_Process(&protocol, now_ms);
 | `ALARM1 DEL` | 删除闹钟 |
 | `ALARM ?` | 查询三个闹钟 |
 | `IMU ?` | 查询同源 X/Y/Z 姿态角 |
+| `IMU RAW ?` | 扩展诊断：查询当前原始数据与有效性、校准状态 |
+| `IMU FAULT ?` | 扩展诊断：查询最近一次HOLD首次故障快照；恢复和OFF不覆盖，成功重新ON或复位清除 |
 | `SERVO ?` | 查询角度/状态 |
 | `SERVO SET 90` | 整数角度 0～180 |
 | `SERVO HOLD ON`、`SERVO HOLD OFF`、`SERVO HOLD ?` | 姿态保持控制与查询 |

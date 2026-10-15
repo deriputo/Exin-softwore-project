@@ -38,6 +38,8 @@ Git试验标签：`v0.2.0-slew180-test`，分支`codex/hold-response`。
 
 下一项优先处理到位摆动，之后再判断是否需要提速；不同时修改多个因素。
 
+后续用户澄清摆动最后会停止，并报告IMU_INVALID。故障查询时IMU已恢复VALID1/CAL1/AGE0/REASON NONE，但控制故障仍锁存；不能确认停止是自然收敛还是故障保持。已转入[首次故障记录测试](IMU_FAULT_CAPTURE_TEST.md)，限速及PID参数暂不再调整。
+
 ## 查找和回退
 
 查看差异：`git diff v0.1.0-stable v0.2.0-slew180-test -- Application tests`。

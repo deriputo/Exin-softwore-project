@@ -45,6 +45,8 @@ uint8_t Protocol_Parse(const char *line, ProtocolCommand *command)
         command->type = PROTOCOL_CMD_IMU_QUERY;
     } else if (strcmp(line, "IMU RAW ?") == 0) {
         command->type = PROTOCOL_CMD_IMU_RAW_QUERY;
+    } else if (strcmp(line, "IMU FAULT ?") == 0) {
+        command->type = PROTOCOL_CMD_IMU_FAULT_QUERY;
     } else if (strcmp(line, "SERVO ?") == 0) {
         command->type = PROTOCOL_CMD_SERVO_QUERY;
     } else if (length > 10u && strncmp(line, "SERVO SET ", 10) == 0) {

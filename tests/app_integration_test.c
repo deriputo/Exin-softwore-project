@@ -34,6 +34,8 @@ static int32_t delta;
 static float pose;
 static bool bus_busy, display_power, imu_failed;
 static bool imu_uncalibrated;
+static bool imu_invalid_data;
+static float imu_ax, imu_ay, imu_az;
 static uint32_t imu_age;
 static uint8_t frame[1024];
 static char screen[1024], rx[4096], tx[131072];
@@ -124,12 +126,13 @@ void IMU_Init(uint32_t ms) { (void)ms; }
 void IMU_Process(uint32_t ms) { (void)ms; }
 bool IMU_GetSample(IMUSample *sample)
 {
-    memset(sample, 0, sizeof(*sample)); sample->valid = !imu_failed && imu_age <= 100u;
+    memset(sample, 0, sizeof(*sample)); sample->valid = !imu_failed && !imu_invalid_data && imu_age <= 100u;
     sample->calibrated = !imu_failed && !imu_uncalibrated;
     sample->timestamp_ms = at - imu_age;
     sample->roll_deg = 25.0f; sample->pitch_deg = pose; /* Different axes catch a wrong selection. */
     sample->gyro_x_dps = 1.2f; sample->gyro_y_dps = -3.4f; sample->gyro_z_dps = 0.5f;
-    return !imu_failed;
+    sample->accel_x_g = imu_ax; sample->accel_y_g = imu_ay; sample->accel_z_g = imu_az;
+    return sample->valid;
 }
 IMUStatus IMU_GetStatus(void) { return imu_failed ? IMU_FAULT : IMU_READY; }
 uint8_t IMU_GetAddress(void) { return 0x68; }
@@ -219,6 +222,7 @@ static void Reset(void)
     at = 0; display_ready_at = 100u; encoder = 0; delta = 0; pose = 0; pressed = blocked_tx = 0;
     imu_failed = false;
     imu_uncalibrated = false; imu_age = 0;
+    imu_invalid_data = false; imu_ax = 0; imu_ay = -1; imu_az = 0;
     rx_read = rx_write = tx_length = event_read = event_write = 0; tx[0] = '\0';
     bt_rx_read = bt_rx_write = bt_tx_length = bt_blocked_tx = 0; bt_tx[0] = '\0'; app_usart3.SR = 0;
     app_gpioa.IDR = KEY1_GPIO_PIN | KEY2_GPIO_PIN; app_usart1.SR = 0; pwm_calls = 0;
@@ -375,6 +379,54 @@ int main(void)
     assert(pulse > 1667u && pulse <= 2500u); /* Negative mount: smaller target needs larger output. */
     Feed("SERVO HOLD ?\n"); Until(at + 50u);
     assert(strstr(tx, "target=+0.0") && strstr(tx, "FAULT=OFF"));
+
+    /* Capture the first bad frame and preserve it after the driver recovers.
+       A later live valid sample must not clear the controller's fault/pulse. */
+    {
+        char expected_at[32];
+        Reset(); Feed("IMU FAULT ?\n"); Until(at + 50u);
+        assert(strcmp(tx, "LAST_FAULT=NONE\r\n") == 0);
+        Feed("SERVO HOLD ON\n"); Until(at + 50u);
+        imu_failed = true; Step(); retained = pulse;
+        (void)snprintf(expected_at, sizeof(expected_at), "AT=%lu ", (unsigned long)at);
+        imu_failed = false; pose = 40.6f; Until(at + 100u);
+        assert(pulse == retained);
+        tx_length = 0; tx[0] = '\0';
+        Feed("SERVO HOLD ?\nIMU RAW ?\nIMU FAULT ?\n"); Until(at + 100u);
+        assert(strstr(tx, "FAULT=IMU_INVALID") && strstr(tx, "measured=+130.6"));
+        assert(strstr(tx, "VALID=1 CAL=1") && strstr(tx, "REASON=NONE"));
+        assert(strstr(tx, "LAST_FAULT=IMU_INVALID") && strstr(tx, "SRC=\"WHO NACK\""));
+        assert(strstr(tx, expected_at) && pulse == retained);
+        BluetoothFeed("IMU FAULT ?\n"); Until(at + 50u);
+        assert(strstr(bt_tx, "SRC=\"WHO NACK\""));
+        Feed("SERVO HOLD OFF\n"); Until(at + 50u);
+        tx_length = 0; tx[0] = '\0'; Feed("IMU FAULT ?\n"); Until(at + 50u);
+        assert(strstr(tx, expected_at) && strstr(tx, "SRC=\"WHO NACK\""));
+        Feed("SERVO HOLD ON\n"); Until(at + 50u);
+        tx_length = 0; tx[0] = '\0'; Feed("IMU FAULT ?\n"); Until(at + 50u);
+        assert(strcmp(tx, "LAST_FAULT=NONE\r\n") == 0);
+    }
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+    imu_age = 101u; Step(); imu_age = 0;
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"SAMPLE_STALE\"") && strstr(tx, "AGE=101"));
+
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+    imu_invalid_data = true; imu_ay = 0; imu_az = 1; Step();
+    imu_invalid_data = false; imu_ay = -1; imu_az = 0;
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"AXIS_PROJECTION\"") && strstr(tx, "AX=+0 AY=+0 AZ=+1000"));
+
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+    imu_invalid_data = true; imu_ay = 0; Step();
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"ACCEL_NORM\""));
+
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+    imu_uncalibrated = true; Step(); imu_uncalibrated = false;
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"UNCALIBRATED\""));
+
     Reset(); Feed("TIME(14:"); BluetoothFeed("HELP\r\n"); Until(at + 100u);
     assert(strstr(bt_tx, "TIME(hh:mm:ss)") && !tx_length);
     Feed("30:05)\r\n"); Until(at + 100u);
