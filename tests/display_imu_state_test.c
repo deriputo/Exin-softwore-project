@@ -7,6 +7,7 @@
 static I2CBusRequest *active;
 static unsigned int imu_reads, oled_data_chunks, oled_commands;
 static bool fail_imu;
+static bool fail_oled_data;
 static uint8_t device_address = 0x68, device_id = 0x68;
 static I2CBusResult failure = I2C_BUS_NACK;
 static unsigned int imu_writes;
@@ -41,6 +42,10 @@ void I2CBus_Process(uint32_t now)
     } else {
         assert(active->address == 0x3c);
         if (active->tx[0] == 0x40) {
+            if (fail_oled_data) {
+                fail_oled_data = false;
+                active->result = I2C_BUS_NACK; active = 0; return;
+            }
             assert(active->tx_length == 17 && display_at <= 1008);
             memcpy(display + display_at, active->tx + 1, 16);
             ++oled_data_chunks;
@@ -64,15 +69,23 @@ int main(void)
     for (now = 0; now < 3000; ++now) Tick(now);
     assert(IMU_IsReady() && IMU_GetSample(&sample) && sample.calibrated);
     assert(imu_reads >= 200 && OLED_IsReady() && OLED_IsPowered());
-    assert(oled_data_chunks >= 64);
+    assert(oled_data_chunks == 64); /* Initial RAM is unknown, including zero bytes. */
     OLED_Clear(); OLED_DrawPixel(0, 0, true); OLED_Present();
     chunks = oled_data_chunks;
     Tick(now++); /* Copy snapshot on IDLE. */
     OLED_Clear(); OLED_DrawPixel(127, 63, true); OLED_Present();
-    while (oled_data_chunks < chunks + 64 && now < 5000) Tick(now++);
+    while (oled_data_chunks < chunks + 1 && now < 5000) Tick(now++);
     assert(display[0] == 1 && display[1023] == 0); /* First snapshot never mutated. */
-    while (oled_data_chunks < chunks + 128 && now < 6000) Tick(now++);
+    while (OLED_IsBusy() && now < 6000) Tick(now++);
+    assert(oled_data_chunks == chunks + 3); /* One chunk, then erase + draw two chunks. */
     assert(display[0] == 0 && display[1023] == 0x80); /* Newest next frame preserved. */
+    chunks = oled_data_chunks;
+    OLED_Present();
+    Tick(now++);
+    assert(!OLED_IsBusy() && oled_data_chunks == chunks); /* Identical frame: no writes. */
+    OLED_Clear(); OLED_Present();
+    while (OLED_IsBusy() && now < 6000) Tick(now++);
+    assert(oled_data_chunks == chunks + 1 && display[1023] == 0); /* Erasure is dirty too. */
     OLED_SetPower(false);
     while (OLED_IsPowered() && now < 6500) Tick(now++);
     assert(!OLED_IsPowered() && OLED_IsReady());
@@ -90,9 +103,44 @@ int main(void)
     for (; now < 11000; ++now) Tick(now);
     assert(IMU_IsReady() && IMU_GetSample(&sample)); /* Peripheral failure retries/calibrates. */
     assert(IMU_RequestCalibration() && IMU_GetStatus() == IMU_CALIBRATING);
+    chunks = oled_data_chunks;
     OLED_SetPower(true);
     for (; now < 14000; ++now) Tick(now);
     assert(IMU_IsReady() && OLED_IsPowered() && oled_commands >= 3);
+    assert(oled_data_chunks == chunks + 64); /* Wake always restores the entire image. */
+
+    /* A failed chunk cannot become the trusted display image. Reinitialization
+       must restore even unchanged/zero regions from unknown display RAM. */
+    OLED_DrawPixel(16, 8, true); OLED_Present(); fail_oled_data = true;
+    for (; now < 14500; ++now) Tick(now);
+    assert(!OLED_IsReady());
+    memset(display, 0xff, sizeof(display));
+    chunks = oled_data_chunks;
+    for (; now < 17000; ++now) Tick(now);
+    assert(OLED_IsReady() && !OLED_IsBusy() && IMU_IsReady());
+    assert(oled_data_chunks == chunks + 64);
+    for (chunks = 0; chunks < sizeof(display); ++chunks)
+        assert(display[chunks] == (chunks == 144 ? 1 : 0));
+
+    /* Interrupt a multi-chunk refresh to blank promptly. Latest drawing while
+       blanked must replace the interrupted snapshot on wake. */
+    chunks = oled_data_chunks;
+    OLED_FillRect(0, 0, 128, 64, true); OLED_Present();
+    while (oled_data_chunks == chunks && now < 17500) Tick(now++);
+    assert(oled_data_chunks > chunks);
+    OLED_SetPower(false);
+    while (OLED_IsPowered() && now < 18000) Tick(now++);
+    assert(!OLED_IsPowered() && oled_data_chunks < chunks + 64);
+    OLED_Clear(); OLED_DrawPixel(127, 63, true); OLED_Present();
+    chunks = oled_data_chunks;
+    for (; now < 18500; ++now) Tick(now);
+    assert(oled_data_chunks == chunks);
+    OLED_SetPower(true);
+    for (; now < 19500; ++now) Tick(now);
+    assert(OLED_IsPowered() && !OLED_IsBusy());
+    assert(oled_data_chunks == chunks + 64);
+    for (chunks = 0; chunks < sizeof(display); ++chunks)
+        assert(display[chunks] == (chunks == 1023 ? 0x80 : 0));
 
     /* AD0 high: missing 0x68 is probed read-only, then 0x69 works. */
     device_address = 0x69; I2CBus_Init(); IMU_Init(0); OLED_Init(0);

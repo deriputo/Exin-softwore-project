@@ -13,10 +13,26 @@ typedef enum { INIT_DELAY, INIT_SEND, INIT_WAIT, IDLE, ADDRESS_SEND,
                ADDRESS_WAIT, DATA_SEND, DATA_WAIT, POWER_WAIT, RETRY } State;
 static State state;
 static uint8_t frame[1024], snapshot[1024], tx[OLED_CHUNK_SIZE + 1u];
+/* Only successful data writes update this mirror of display RAM. */
+static uint8_t sent[1024], sent_valid[1024 / OLED_CHUNK_SIZE];
 static I2CBusRequest request;
 static uint16_t offset;
 static uint32_t state_ms;
 static bool ready, requested_power, powered, pending, transferring;
+
+static void NextChangedChunk(void)
+{
+    while (offset < sizeof(snapshot)) {
+        if (!sent_valid[offset / OLED_CHUNK_SIZE] ||
+            memcmp(snapshot + offset, sent + offset, OLED_CHUNK_SIZE) != 0) {
+            state = ADDRESS_SEND;
+            return;
+        }
+        offset += OLED_CHUNK_SIZE;
+    }
+    transferring = false;
+    state = IDLE;
+}
 
 static bool Submit(const uint8_t *data, uint16_t length, uint32_t now_ms)
 {
@@ -35,6 +51,7 @@ void OLED_Init(uint32_t now_ms)
 {
     memset(frame, 0, sizeof(frame));
     memset(snapshot, 0, sizeof(snapshot));
+    memset(sent_valid, 0, sizeof(sent_valid));
     memset(&request, 0, sizeof(request));
     state = INIT_DELAY; state_ms = now_ms;
     ready = false; powered = false; requested_power = true;
@@ -79,6 +96,8 @@ void OLED_Process(uint32_t now_ms)
     case INIT_WAIT:
         if (request.result == I2C_BUS_PENDING) break;
         if (request.result != I2C_BUS_OK) { Fault(now_ms); break; }
+        memset(sent_valid, 0, sizeof(sent_valid));
+        pending = true;
         ready = true; powered = true; state = IDLE;
         break;
     case IDLE:
@@ -87,7 +106,8 @@ void OLED_Process(uint32_t now_ms)
             if (Submit(tx, 2, now_ms)) state = POWER_WAIT;
         } else if (powered && pending) {
             memcpy(snapshot, frame, sizeof(frame));
-            pending = false; transferring = true; offset = 0; state = ADDRESS_SEND;
+            pending = false; transferring = true; offset = 0;
+            NextChangedChunk();
         }
         break;
     case ADDRESS_SEND:
@@ -112,15 +132,19 @@ void OLED_Process(uint32_t now_ms)
     case DATA_WAIT:
         if (request.result == I2C_BUS_PENDING) break;
         if (request.result != I2C_BUS_OK) { Fault(now_ms); break; }
+        memcpy(sent + offset, snapshot + offset, OLED_CHUNK_SIZE);
+        sent_valid[offset / OLED_CHUNK_SIZE] = 1;
         offset += OLED_CHUNK_SIZE;
-        if (offset == sizeof(snapshot)) { transferring = false; state = IDLE; }
-        else state = ADDRESS_SEND;
+        NextChangedChunk();
         break;
     case POWER_WAIT:
         if (request.result == I2C_BUS_PENDING) break;
         if (request.result != I2C_BUS_OK) { Fault(now_ms); break; }
         powered = tx[1] == 0xaf;
-        if (powered) pending = true;
+        if (powered) {
+            memset(sent_valid, 0, sizeof(sent_valid));
+            pending = true;
+        }
         state = IDLE;
         break;
     case RETRY:

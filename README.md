@@ -1,6 +1,6 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
-2026-10-15：稳定基线为Git标签`v0.1.0-stable`；当前`v0.2.1-imu-fault-test`在180°/s试验版上新增`IMU FAULT ?`首次故障记录，PID及保护不变。用户反馈速度提高，但出现到位摆动和IMU_INVALID，优先定位故障。版本清单见[VERSIONS](docs/VERSIONS.md)，本轮步骤见[故障记录测试](docs/IMU_FAULT_CAPTURE_TEST.md)。
+2026-10-15：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.3.0-oled-dirty-test`新增OLED差异刷新，保留180°/s限速及首次故障记录，PID和IMU保护不变。用户暂缓定姿态故障排查，IMU_INVALID尚未修复。版本清单见[VERSIONS](docs/VERSIONS.md)，本轮步骤见[OLED刷新测试](docs/OLED_DIRTY_TEST.md)。
 
 当前进度、最新固件验证状态见[当前进度与下次继续](docs/当前进度与下次继续.md)。当前已恢复题目要求的完整PID与0～180°目标/输出范围，取消开启位置±15°诊断限制；[操作与实物测试](docs/HOLD_EXAM_TEST.md)。IMU安装映射为机构(X,Y,Z)=芯片(X,Z,-Y)，控制机构Pitch；新固件下载和实物反馈方向、精度、扰动恢复验证待完成。
 
