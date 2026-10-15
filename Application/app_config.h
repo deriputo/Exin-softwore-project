@@ -29,5 +29,6 @@
 #define APP_HOLD_OUTPUT_SPAN_DEG 180.0f
 #endif
 #define APP_HOLD_DEADBAND_DEG 0.5f
+#define APP_HOLD_SLEW_DEG_PER_SECOND 180.0f
 /* Cold boot: 23:59:55, servo 90 degrees; power policy uses Sleep by default. */
 #endif

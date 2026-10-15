@@ -16,7 +16,7 @@ static ControlSample Sample(float roll, float pitch, uint32_t now)
 
 /* Same 8deg base step and first-order actuator for old/new tuning. This tests
    relative recovery and safety; it does not predict real SG90 settling time. */
-static uint32_t RecoveryMs(float kp, float ki)
+static uint32_t RecoveryMs(float kp, float ki, float slew)
 {
     Control control;
     ControlConfig config;
@@ -30,6 +30,7 @@ static uint32_t RecoveryMs(float kp, float ki)
     config.integral_limit_deg = 180;
     config.kp = kp; config.ki = ki; config.kd = APP_HOLD_KD;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
+    config.slew_deg_per_second = slew;
     Control_Init(&control, &config, 0);
     sample = Sample(0, plant, 0);
     assert(Control_StartHold(&control, &sample, 0) == CONTROL_OK);
@@ -41,7 +42,7 @@ static uint32_t RecoveryMs(float kp, float ki)
         (void)Control_Update(&control, &sample, now);
         assert(control.state.fault == CONTROL_FAULT_NONE);
         assert(control.state.output_angle_deg >= 0 && control.state.output_angle_deg <= 180);
-        assert(Abs(control.state.output_angle_deg - previous) <= 1.801f);
+        assert(Abs(control.state.output_angle_deg - previous) <= slew * 0.02f + 0.001f);
         previous = control.state.output_angle_deg;
         if (now >= 1000 && Abs(plant - 90) <= 1.0f) stable += 20;
         else stable = 0;
@@ -207,6 +208,7 @@ int main(void)
         config.integral_limit_deg = 180; config.kp = APP_HOLD_KP; config.ki = APP_HOLD_KI;
         config.kd = APP_HOLD_KD; config.deadband_deg = APP_HOLD_DEADBAND_DEG;
         config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
+        config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
         for (index = 0; index < sizeof(targets)/sizeof(targets[0]); ++index) {
             float base = 0;
             plant = 90; previous = 90;
@@ -220,16 +222,19 @@ int main(void)
                 plant += 0.08f * (base + 180.0f - control.state.output_angle_deg - plant);
                 sample = Sample(25, plant, now); (void)Control_Update(&control, &sample, now);
                 assert(control.state.output_angle_deg >= 0 && control.state.output_angle_deg <= 180);
-                assert(Abs(control.state.output_angle_deg - previous) <= 1.801f);
+                assert(Abs(control.state.output_angle_deg - previous) <=
+                    config.slew_deg_per_second * 0.02f + 0.001f);
                 assert(control.state.fault == CONTROL_FAULT_NONE); previous = control.state.output_angle_deg;
             }
             assert(Abs(targets[index] - plant) < 1.0f);
         }
     }
     {
-        uint32_t normal_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI);
+        uint32_t baseline_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI, 90.0f);
+        uint32_t normal_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI, APP_HOLD_SLEW_DEG_PER_SECOND);
         assert(normal_ms < 20000u);
-        printf("Reference PID simulated 8deg base-step recovery: %lu ms\n", (unsigned long)normal_ms);
+        printf("Simulated 8deg base-step recovery: slew90=%lu ms, slew180=%lu ms\n",
+               (unsigned long)baseline_ms, (unsigned long)normal_ms);
     }
     Control_DefaultConfig(&config); config.axis = CONTROL_AXIS_PITCH;
     config.target_min_deg = 0; config.target_limit_deg = 180;

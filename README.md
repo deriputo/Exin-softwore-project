@@ -1,5 +1,7 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+2026-10-15：稳定基线已保存为Git标签`v0.1.0-stable`；当前是待实物验收的`v0.2.0-slew180-test`，仅把HOLD限速90提高到180°/s，PID保持不变。版本清单见[VERSIONS](docs/VERSIONS.md)，用户测试步骤见[第一项限速试验](docs/STEP2_SLEW_TEST.md)。
+
 当前进度、最新固件验证状态见[当前进度与下次继续](docs/当前进度与下次继续.md)。当前已恢复题目要求的完整PID与0～180°目标/输出范围，取消开启位置±15°诊断限制；[操作与实物测试](docs/HOLD_EXAM_TEST.md)。IMU安装映射为机构(X,Y,Z)=芯片(X,Z,-Y)，控制机构Pitch；新固件下载和实物反馈方向、精度、扰动恢复验证待完成。
 
 单一 STM32F103C8T6 标准外设库（SPL）工程，入口为 `Application/main.c`，Keil 工程为 `Project/eXin.uvprojx`。实现五个页面、RTC 时间与三个闹钟、编码器、MPU6050、舵机手动/0～180°连杆姿态定角、电脑与蓝牙串口和空闲电源管理。

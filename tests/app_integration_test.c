@@ -358,6 +358,11 @@ int main(void)
     assert(strstr(tx, "target=+180.0"));
     Turn(-500); Key(KEY_ID_2, 0); Feed("SERVO HOLD ?\n"); Until(at + 50u);
     assert(strstr(tx, "target=+0.0"));
+    /* A large measured disturbance must use the application 180deg/s limit:
+       3.6deg / 20ms = 40us per update. The old90deg/s preset gives20us. */
+    Reset(); Feed("SERVO HOLD ON\n"); Step(); pose = -90.0f;
+    Until(at + 20u); assert(pulse == 1460u);
+    Until(at + 20u); assert(pulse == 1420u);
     /* Exercise the actual application configuration, not only core defaults:
        confirmed targets must be able to move beyond the diagnostic +/-15deg.
        The fixed sensor double deliberately leaves a persistent pose error. */

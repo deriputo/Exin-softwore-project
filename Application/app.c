@@ -500,6 +500,7 @@ void App_Init(uint32_t at)
     config.kp = APP_HOLD_KP; config.ki = APP_HOLD_KI; config.kd = APP_HOLD_KD;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
+    config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
     Control_Init(&control, &config, at);
     Protocol_Init(&protocol, Command, WriteProtocol, (void *)&wired_channel);
     Protocol_Init(&bluetooth_protocol, Command, WriteProtocol, (void *)&bluetooth_channel);
