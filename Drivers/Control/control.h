@@ -4,7 +4,8 @@
 #include <stdint.h>
 
 typedef enum { CONTROL_AXIS_ROLL = 0, CONTROL_AXIS_PITCH = 1 } ControlAxis;
-typedef enum { CONTROL_MODE_PID = 0, CONTROL_MODE_FOLLOW = 1 } ControlMode;
+typedef enum { CONTROL_MODE_PID = 0, CONTROL_MODE_FOLLOW = 1,
+               CONTROL_MODE_DIRECT = 2 } ControlMode;
 typedef enum {
     CONTROL_FAULT_NONE = 0,
     CONTROL_FAULT_IMU_INVALID,
@@ -46,6 +47,8 @@ typedef struct {
     ControlMode mode;
     float follow_gain;
     float follow_filter_seconds;
+    float direct_position_gain; /* Actuator degrees / attitude error degree. */
+    float actuator_time_constant_seconds; /* Estimate, not position feedback. */
 } ControlConfig;
 
 typedef struct {
@@ -74,19 +77,20 @@ typedef struct {
     float follow_displacement_deg;
     float follow_filtered_deg;
     float follow_accepted_deg;
+    float estimated_actuator_deg;
     uint8_t have_previous;
 } Control;
 
 void Control_DefaultConfig(ControlConfig *config);
 void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms);
 ControlResult Control_SetManualAngle(Control *control, int16_t angle_deg);
-/* Captures sensor and servo reference. PID capture obeys target limits;
+/* Captures sensor and servo reference. PID/DIRECT obey target limits;
    FOLLOW accepts the full valid sensor range, unwraps motion and maps 1:1. */
 ControlResult Control_StartHold(Control *control, const ControlSample *sample, uint32_t now_ms);
 /* Clears fault and retains the last pulse as manual output. */
 void Control_StopHold(Control *control);
 ControlResult Control_SetTarget(Control *control, float target_deg);
-/* Main loop; updates the selected PID/FOLLOW mode on new sample/period only. */
+/* Main loop; updates PID/FOLLOW/DIRECT on new sample/period only. */
 uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t now_ms);
 const ControlSnapshot *Control_GetSnapshot(const Control *control);
 const char *Control_FaultName(ControlFault fault);

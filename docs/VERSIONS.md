@@ -18,9 +18,10 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.6.4-p-only-diagnostic` | Kp1.0/Ki0/Kd0纯比例对照 | 用户确认水平及受扰后无明显摆动，受扰残差约5.9°；不算完整定角通过 |
 | `v0.6.5-pi05-no-d-test` | Kp1/Kd0，Ki_eff=0.5/[1+(e/8)^2] | 用户确认后段停稳，小角度消差有效；大角度仍缓慢间歇挪动，提速未通过 |
 | `v0.7.0-bounded-i-test` | Kp1/Kd0；积分增益0.4～1.0、尺度4° | 用户反馈间歇挪动减少、无过冲/持续摆动，但响应仍慢，性能未完全验收 |
-| `v0.7.1-i-floor08-test` | 仅提高积分下限到0.8，上限1.0、Kp1/Kd0不变 | control/app_integration通过，待静止与尾段消差实物对照 |
+| `v0.7.1-i-floor08-test` | 积分下限0.8，上限1.0、Kp1/Kd0 | 用户确认三次底座动作，仍感觉不够快；记录从峰值到1°约4秒，不满足期望 |
+| `v0.8.0-direct-compensation-test` | 新增基于执行器位置估计的DIRECT模式，补偿系数0.5、时间常数0.30秒；旧PI保留 | control_direct/control/app_integration通过，288组模型检查通过，尚未实物验收 |
 
-当前分支为`codex/hold-response`。有界积分减轻间歇动作但尾段仍慢；现进入[提高积分下限到0.8](I_FLOOR08_TEST.md)，保留Kp1/D0及保护。每版单独提交、打标签并备份；MCU编译烧录由用户执行。IMU_INVALID仍未解决。
+当前分支为`codex/hold-response`。用户要求几乎到位、停止逐项加Ki，已授权[DIRECT独立试验版](DIRECT_COMPENSATION_TEST.md)。保留旧PI及既有保护；MCU编译烧录由用户执行。模型不保证实物一步到位，IMU_INVALID仍未解决。
 
 ## 查看代码
 

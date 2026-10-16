@@ -1,6 +1,6 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
-2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.7.1-i-floor08-test`仅提高积分下限0.4→0.8，保留上限1、尺度4°及Kp1/Kd0，待实物静止与尾段消差验收。前版挪动减少但仍慢，IMU_INVALID未解决。OLED及分析工具保留。步骤和曲线见[积分下限0.8测试](docs/I_FLOOR08_TEST.md)，版本见[VERSIONS](docs/VERSIONS.md)。
+2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.8.0-direct-compensation-test`新增执行器位置估计＋姿态误差DIRECT补偿，系数0.5、模型时间常数0.30秒，OLED标识HOLD Y DIRECT。旧PI实现/参数及保护保留，尚未实物验收，不能保证一步到位。OLED/分析工具保留，IMU_INVALID仍未解决。[测试步骤](docs/DIRECT_COMPENSATION_TEST.md)，[版本](docs/VERSIONS.md)。
 
 当前进度、最新固件验证状态见[当前进度与下次继续](docs/当前进度与下次继续.md)。当前已恢复题目要求的完整PID与0～180°目标/输出范围，取消开启位置±15°诊断限制；[操作与实物测试](docs/HOLD_EXAM_TEST.md)。IMU安装映射为机构(X,Y,Z)=芯片(X,Z,-Y)，控制机构Pitch；新固件下载和实物反馈方向、精度、扰动恢复验证待完成。
 
@@ -110,7 +110,7 @@ Set-Location Project
 python -m unittest discover -s tests -p '*_test.py' -v
 ```
 
-17 组 C 测试覆盖按键、PWM、编码器、RTC、备份恢复、电源、串口队列、协议、PID、UI、I²C、IMU/OLED 状态机及真实应用整合；另有 3 项 Python 上位机测试。应用联调使用硬件替身，不代表实物验证。`docs/ui-preview.png` 来自真实应用绘制的模拟帧缓冲，不是板卡照片。
+18 组 C 测试覆盖按键、PWM、编码器、RTC、备份恢复、电源、串口队列、协议、PID/DIRECT、UI、I²C、IMU/OLED 状态机及真实应用整合；另有上位机3项、离线分析5项Python测试。本轮执行control、control_direct与app_integration，均通过。应用联调使用硬件替身，不代表实物验证。`docs/ui-preview.png` 来自模拟帧缓冲，不是板卡照片。
 
 最新验证记录见 `docs/VALIDATION.md`。用户已解决烧录并开始实物测试；随后依据其 ID=0x70 模块与报警灯低有效接线修正驱动，新版已编译并通过主机测试，但尚未由本次操作烧录或完成实机验收。功耗、波形、IMU 与 PID 仍需实测，不能用主机模拟代替。
 

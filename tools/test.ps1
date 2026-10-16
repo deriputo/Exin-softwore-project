@@ -18,6 +18,7 @@ $cases = @(
     @{name='power_state'; fake='tests/power_fake'; sources=@('Drivers/Power/power_core.c','Drivers/Power/power.c')},
     @{name='serial_ring'; sources=@('Drivers/Serial/serial_ring.c')},
     @{name='control'; sources=@('Drivers/Control/control.c')},
+    @{name='control_direct'; sources=@('Drivers/Control/control.c')},
     @{name='protocol'; sources=@('Protocol/protocol.c')},
     @{name='ui_core'; sources=@('Application/ui_core.c')},
     @{name='imu_core'; sources=@('Drivers/IMU/imu_core.c')},

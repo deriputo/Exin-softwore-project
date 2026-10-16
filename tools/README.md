@@ -1,5 +1,7 @@
 # 可选 Python 上位机
 
+DIRECT试验模式保持CSV字段兼容。此模式P列为候选姿态误差位置补偿（非原PI的Kp项），I/D为0；target/measured/error/servo等含义不变。没有实际舵机轴角反馈，servo仍是指令。算法判别请看板端HOLD Y DIRECT标识，详见docs/DIRECT_COMPENSATION_TEST.md。
+
 新增离线分析入口`analyze_trace.py`：读取本工具记录的CSV并导出HTML曲线/JSON指标，不连接串口、不改变固件。[用法和验收](../docs/TRACE_ANALYSIS_TEST.md)。
 
 此工具用于电脑串口控制与姿态闭环演示，属于软件扩展，不是 STM32 固件依赖。不会自动选择、连接串口或发送舵机/TRACE/HOLD 命令。

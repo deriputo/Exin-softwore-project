@@ -10,7 +10,9 @@
 #define APP_HOLD_AXIS CONTROL_AXIS_PITCH
 /* Measured mount: output90->100 makes calibrated Pitch0->-10deg. */
 #define APP_HOLD_DIRECTION -1
-#define APP_CONTROL_MODE CONTROL_MODE_PID
+#define APP_CONTROL_MODE CONTROL_MODE_DIRECT
+#define APP_DIRECT_POSITION_GAIN 0.5f
+#define APP_ACTUATOR_TIME_CONSTANT_SECONDS 0.30f
 #define APP_ATTITUDE_REFERENCE_DEG 90.0f
 /* Exam mode: full travel PID. Optional commissioning preset stays disabled. */
 #define APP_HOLD_DIAGNOSTIC 0

@@ -1,6 +1,7 @@
 /* Actual application/UI/protocol/PID, with deterministic hardware doubles. */
 #include "app.h"
 #include "app_config.h"
+#include "control.h"
 #include "ui_core.h"
 #include "key.h"
 #include "key_config.h"
@@ -454,7 +455,7 @@ int main(void)
     Reset(); Until(at + 61000u); assert(Power_IsIdle() && !display_power);
     BluetoothFeed("SERVO ?\r\n"); Until(at + 100u);
     assert(!Power_IsIdle() && display_power && strstr(bt_tx, "SERVO="));
-    if (APP_HOLD_KI == 0.0f) {
+    if (APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI == 0.0f) {
         uint16_t expected;
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
         if (APP_HOLD_KD == 0.0f) {
@@ -474,12 +475,24 @@ int main(void)
         Until(at + 10000u);
         assert(pulse == expected); /* Application really has I disabled: no slow drift. */
     }
-    if (APP_HOLD_KI > 0.0f && APP_HOLD_KD == 0.0f) {
+    if (APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI > 0.0f && APP_HOLD_KD == 0.0f) {
         uint16_t first;
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
         pose = 5.0f; Until(at + 2000u); first = pulse;
         Until(at + 10000u);
         assert(pulse > first + 20u && pulse < 2500u); /* Restored I acts on persistent error. */
+    }
+    if (APP_CONTROL_MODE == CONTROL_MODE_DIRECT) {
+        Reset(); Turn(3); Key(KEY_ID_1, 0);
+        Feed("SERVO HOLD ON\n"); Until(at + 100u);
+        assert(strstr(screen, "HOLD Y DIRECT"));
+        pose = 5.0f; Until(at + 40u);
+        assert(pulse > 1500u); /* Corrected physical direction. */
+        retained = pulse;
+        pose = 0.0f; Until(at + 2000u);
+        assert(pulse == retained); /* On-target command retained despite model lag. */
+        Feed("SERVO TRACE ON\n"); Until(at + 100u);
+        assert(strstr(tx, "H,ms,target,measured,error,P,I,D,servo,saturated,fault"));
     }
     puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;

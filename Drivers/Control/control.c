@@ -57,6 +57,8 @@ void Control_DefaultConfig(ControlConfig *config)
     config->mode = CONTROL_MODE_PID;
     config->follow_gain = 1.0f;
     config->follow_filter_seconds = 0.15f;
+    config->direct_position_gain = 0.5f;
+    config->actuator_time_constant_seconds = 0.30f;
 }
 
 static uint8_t ConfigValid(const ControlConfig *config)
@@ -82,10 +84,16 @@ static uint8_t ConfigValid(const ControlConfig *config)
         config->timing_timeout_ms >= config->period_ms && config->timing_timeout_ms <= 1000u &&
         (config->axis == CONTROL_AXIS_ROLL || config->axis == CONTROL_AXIS_PITCH) &&
         (config->direction == 1 || config->direction == -1) &&
-        (config->mode == CONTROL_MODE_PID || config->mode == CONTROL_MODE_FOLLOW) &&
+        (config->mode == CONTROL_MODE_PID || config->mode == CONTROL_MODE_FOLLOW ||
+         config->mode == CONTROL_MODE_DIRECT) &&
         NumberValid(config->follow_gain) && config->follow_gain > 0.0f && config->follow_gain <= 10.0f &&
         NumberValid(config->follow_filter_seconds) && config->follow_filter_seconds >= 0.0f &&
-        config->follow_filter_seconds <= 5.0f);
+        config->follow_filter_seconds <= 5.0f &&
+        NumberValid(config->direct_position_gain) && config->direct_position_gain > 0.0f &&
+        config->direct_position_gain <= 2.0f &&
+        NumberValid(config->actuator_time_constant_seconds) &&
+        config->actuator_time_constant_seconds >= 0.02f &&
+        config->actuator_time_constant_seconds <= 2.0f);
 }
 
 void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms)
@@ -100,6 +108,7 @@ void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms
     control->state.output_angle_deg = 90.0f;
     control->state.pulse_us = 1500u;
     control->bias_angle_deg = 90.0f;
+    control->estimated_actuator_deg = 90.0f;
     control->last_update_ms = now_ms;
 }
 
@@ -124,7 +133,7 @@ ControlResult Control_StartHold(Control *control, const ControlSample *sample, u
         return CONTROL_SENSOR_UNAVAILABLE;
     }
     measured = Selected(control, sample);
-    if (control->config.mode == CONTROL_MODE_PID &&
+    if (control->config.mode != CONTROL_MODE_FOLLOW &&
         (measured < control->config.target_min_deg || measured > control->config.target_limit_deg)) {
         return CONTROL_BAD_ARGUMENT;
     }
@@ -137,6 +146,8 @@ ControlResult Control_StartHold(Control *control, const ControlSample *sample, u
     /* Capture current actuator output as bias; zero error keeps exactly this
        pulse even near a rail, without requiring a large integrator preload. */
     control->bias_angle_deg = control->state.output_angle_deg;
+    /* Entry assumes manual motion has settled. There is no servo encoder. */
+    control->estimated_actuator_deg = control->state.output_angle_deg;
     control->follow_origin_deg = measured;
     control->follow_displacement_deg = 0.0f;
     control->follow_filtered_deg = 0.0f;
@@ -214,6 +225,38 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
     output_low = Clamp(control->bias_angle_deg - control->config.hold_output_span_deg, 0.0f, 180.0f);
     output_high = Clamp(control->bias_angle_deg + control->config.hold_output_span_deg, 0.0f, 180.0f);
     measured = Selected(control, sample);
+    if (control->config.mode == CONTROL_MODE_DIRECT) {
+        /* Advance using the preceding LIMITED command, not the new request.
+           The command is not treated as a measured shaft position. */
+        control->estimated_actuator_deg += dt /
+            (control->config.actuator_time_constant_seconds + dt) *
+            (control->state.output_angle_deg - control->estimated_actuator_deg);
+        control->estimated_actuator_deg = Clamp(control->estimated_actuator_deg, 0.0f, 180.0f);
+        error = control->state.target_deg - measured;
+        control->state.error_deg = error;
+        control->state.i_term = control->state.d_term = 0.0f;
+        if (Abs(error) <= control->config.deadband_deg) {
+            /* Keep the achieved command: returning to the lagging estimate
+               here would undo a successful correction. */
+            control->state.p_term = 0.0f;
+            raw_output = control->state.output_angle_deg;
+        } else {
+            control->state.p_term = control->config.direct_position_gain * error;
+            raw_output = control->estimated_actuator_deg +
+                (float)control->config.direction * control->state.p_term;
+        }
+        limit = control->config.slew_deg_per_second * dt;
+        output = Clamp(Clamp(raw_output, output_low, output_high),
+            control->state.output_angle_deg - limit, control->state.output_angle_deg + limit);
+        control->state.saturated = (uint8_t)(Abs(output - raw_output) > 0.001f);
+        control->state.output_angle_deg = output;
+        control->state.pulse_us = AngleToPulse(output);
+        control->last_update_ms = now_ms;
+        control->last_sample_ms = sample->timestamp_ms;
+        control->previous_measured = measured;
+        control->have_previous = 1;
+        return control->state.pulse_us;
+    }
     if (control->config.mode == CONTROL_MODE_FOLLOW) {
         /* The sensor is on the hand-turned board, not the actuator. Map board
            displacement directly; never integrate an unattainable PID error.
