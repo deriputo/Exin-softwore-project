@@ -270,94 +270,8 @@ class MonitorApp:
         self.root.after(50, self._poll)
 
     def _build(self):
-        ttk = self.ttk
-        container = ttk.Frame(self.root, padding=12)
-        container.pack(fill="both", expand=True)
-        toolbar = ttk.Frame(container)
-        toolbar.pack(fill="x", pady=(0, 10))
-        self.mode_combo = ttk.Combobox(toolbar, textvariable=self.transport,
-                                      values=("USB串口", "蓝牙BLE"), width=10, state="readonly")
-        self.mode_combo.pack(side="left")
-        self.mode_combo.bind("<<ComboboxSelected>>", self._change_transport)
-        self.port_combo = ttk.Combobox(toolbar, textvariable=self.port, width=30, state="readonly")
-        self.port_combo.pack(side="left", padx=6)
-        self.refresh_button = ttk.Button(toolbar, text="刷新 / 扫描", command=self._refresh_ports)
-        self.refresh_button.pack(side="left")
-        self.connect_button = ttk.Button(toolbar, text="连接", command=self._connect)
-        self.connect_button.pack(side="left")
-        ttk.Button(toolbar, text="断开", command=self._disconnect).pack(side="left", padx=6)
-        ttk.Label(toolbar, textvariable=self.status).pack(side="left", padx=12)
-
-        self.ble_box = ttk.LabelFrame(container, text="BLE配置：默认HC-04；先断开手机小程序，开启电脑蓝牙", padding=4)
-        self.uuid_entries = []
-        for label, variable in (("服务", self.ble_service), ("接收", self.ble_rx), ("发送", self.ble_tx)):
-            row = ttk.Frame(self.ble_box)
-            row.pack(fill="x")
-            ttk.Label(row, text=label, width=6).pack(side="left")
-            entry = ttk.Entry(row, textvariable=variable, width=44)
-            entry.pack(side="left")
-            self.uuid_entries.append(entry)
-        # Inserted above controls only while BLE is selected.
-        self.toolbar = toolbar
-
-        controls = ttk.LabelFrame(container, text="设备控制（点击才发送）", padding=8)
-        controls.pack(fill="x")
-        time_row = ttk.Frame(controls)
-        time_row.pack(fill="x", pady=3)
-        ttk.Label(time_row, text="时间").pack(side="left", padx=(0, 12))
-        self.time_fields = self._time_inputs(time_row, ("23", "59", "55"))
-        ttk.Button(time_row, text="设置 TIME", command=self._set_time).pack(side="left", padx=8)
-        for text in ("HELP", "IMU ?", "SERVO ?", "ALARM ?"):
-            ttk.Button(time_row, text=text, command=lambda command=text: self._send(command)).pack(side="left", padx=3)
-
-        alarm_row = ttk.Frame(controls)
-        alarm_row.pack(fill="x", pady=3)
-        ttk.Label(alarm_row, text="闹钟").pack(side="left", padx=(0, 12))
-        ttk.Combobox(alarm_row, textvariable=self.alarm_number, values=("1", "2", "3"),
-                     width=3, state="readonly").pack(side="left", padx=(0, 8))
-        self.alarm_fields = self._time_inputs(alarm_row, ("06", "30", "00"))
-        ttk.Button(alarm_row, text="设置并启用", command=self._set_alarm).pack(side="left", padx=8)
-        ttk.Button(alarm_row, text="OFF", command=lambda: self._send("ALARM" + self.alarm_number.get() + " OFF")).pack(side="left", padx=3)
-        ttk.Button(alarm_row, text="DEL", command=lambda: self._send("ALARM" + self.alarm_number.get() + " DEL")).pack(side="left", padx=3)
-
-        servo_row = ttk.Frame(controls)
-        servo_row.pack(fill="x", pady=3)
-        ttk.Label(servo_row, text="舵机").pack(side="left", padx=(0, 12))
-        ttk.Spinbox(servo_row, textvariable=self.servo_angle, from_=0, to=180, width=5).pack(side="left")
-        ttk.Label(servo_row, text="°").pack(side="left")
-        ttk.Button(servo_row, text="确认 SET", command=self._set_servo).pack(side="left", padx=8)
-        for text in ("HOLD ON", "HOLD OFF", "HOLD ?", "TRACE ON", "TRACE OFF", "TRACE ?"):
-            ttk.Button(servo_row, text=text, command=lambda command=text: self._send("SERVO " + command)).pack(side="left", padx=3)
-
-        command_row = ttk.Frame(controls)
-        command_row.pack(fill="x", pady=(7, 3))
-        ttk.Label(command_row, text="原始命令").pack(side="left", padx=(0, 8))
-        command_entry = ttk.Entry(command_row, textvariable=self.command)
-        command_entry.pack(side="left", fill="x", expand=True)
-        command_entry.bind("<Return>", lambda event: self._send(self.command.get()))
-        ttk.Button(command_row, text="发送", command=lambda: self._send(self.command.get())).pack(side="left", padx=8)
-
-        plot_box = ttk.LabelFrame(container, text="目标 / 实测 / 误差（最近 10 秒）", padding=8)
-        plot_box.pack(fill="both", expand=True, pady=10)
-        ttk.Label(plot_box, textvariable=self.latest).pack(anchor="w")
-        self.canvas = self.tk.Canvas(plot_box, height=240, background="#f8fafc", highlightthickness=0)
-        self.canvas.pack(fill="both", expand=True, pady=(5, 0))
-        self.canvas.bind("<Configure>", lambda event: self._draw_plot())
-
-        logbar = ttk.Frame(container)
-        logbar.pack(fill="x")
-        self.log_button = ttk.Button(logbar, text="开始记录 CSV", command=self._toggle_log)
-        self.log_button.pack(side="left")
-        ttk.Button(logbar, text="清空曲线", command=self._clear_plot).pack(side="left", padx=8)
-        ttk.Button(logbar, text="清空文本", command=lambda: self.console.delete("1.0", "end")).pack(side="left")
-        ttk.Label(logbar, text="CSV 包含电脑接收时间；开启 TRACE 需手动点击。每次连接不会改变舵机。").pack(side="left", padx=12)
-        console_box = ttk.Frame(container)
-        console_box.pack(fill="both", pady=(8, 0))
-        self.console = self.tk.Text(console_box, height=10, wrap="none", font=("Consolas", 10))
-        scrollbar = ttk.Scrollbar(console_box, orient="vertical", command=self.console.yview)
-        self.console.configure(yscrollcommand=scrollbar.set)
-        self.console.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        from monitor_ui import build
+        build(self)
 
     def _time_inputs(self, parent, defaults):
         fields = []
@@ -408,10 +322,10 @@ class MonitorApp:
         self.port.set("")
         self.port_combo.configure(values=())
         if self.transport.get() == "蓝牙BLE":
-            self.ble_box.pack(fill="x", after=self.toolbar, pady=(0, 8))
+            self.ble_box.grid(row=3, column=0, sticky="ew", pady=(6, 8))
             self.status.set("BLE：点击扫描并选择HC-04；不是COM口")
         else:
-            self.ble_box.pack_forget()
+            self.ble_box.grid_remove()
             self.status.set("USB串口：115200 · 8N1")
             self._refresh_ports()
 
@@ -475,7 +389,8 @@ class MonitorApp:
             self.messagebox.showerror("角度无效", str(error))
 
     def _console_line(self, text):
-        self.console.insert("end", text + "\n")
+        tag = "error" if text.startswith("!") else "sent" if text.startswith(">") else "received"
+        self.console.insert("end", text + "\n", tag)
         if int(self.console.index("end-1c").split(".")[0]) > 500:
             self.console.delete("1.0", "101.0")
         self.console.see("end")
@@ -521,6 +436,8 @@ class MonitorApp:
                             self.chart_time += delta / 1000.0
                     self.last_ms = sample.ms
                     self.points.append((self.chart_time, sample))
+                    for variable, value in zip(self.metric_values, (sample.target, sample.measured, sample.error)):
+                        variable.set(f"{value:+.1f}°")
                     self.latest.set(f"目标 {sample.target:+.1f}°   实测 {sample.measured:+.1f}°   误差 {sample.error:+.1f}°   "
                                     f"舵机 {sample.servo:.1f}°   饱和 {sample.saturated}   故障 {sample.fault}")
                     if self.csv_writer:
@@ -544,12 +461,15 @@ class MonitorApp:
         self.points.clear()
         self.last_ms = None
         self.chart_time = 0
+        for variable in self.metric_values:
+            variable.set("—")
+        self.latest.set("等待 TRACE 数据")
         self._draw_plot()
 
     def _draw_plot(self):
         canvas = self.canvas
         canvas.delete("all")
-        width, height = max(canvas.winfo_width(), 200), max(canvas.winfo_height(), 140)
+        width, height = max(canvas.winfo_width(), 200), max(canvas.winfo_height(), 70)
         left, top, right, bottom = 55, 22, width - 18, height - 32
         now = self.chart_time
         start = max(0, now - 10)
@@ -564,19 +484,25 @@ class MonitorApp:
         for index in range(5):
             y = top + index * (bottom - top) / 4
             value = ymax - index * (ymax - ymin) / 4
-            canvas.create_line(left, y, right, y, fill="#dbe3ed")
-            canvas.create_text(left - 7, y, text=f"{value:.1f}", anchor="e", fill="#475569")
+            canvas.create_line(left, y, right, y, fill="#ddddd6")
+            canvas.create_text(left - 7, y, text=f"{value:.1f}", anchor="e", fill="#696965", font=("Consolas", 9))
         for index in range(6):
             x = left + index * (right - left) / 5
-            canvas.create_line(x, top, x, bottom, fill="#e2e8f0")
-            canvas.create_text(x, bottom + 16, text=f"{start + index * 2:.0f}s", fill="#475569")
-        canvas.create_text(10, 8, text="°", anchor="nw", fill="#475569")
-        for label, field, color, legend_x in (("目标", "target", "#dc2626", 70),
-                ("实测", "measured", "#2563eb", 160), ("误差", "error", "#16a34a", 250)):
-            canvas.create_text(legend_x, 8, text=label, fill=color, anchor="w")
+            canvas.create_line(x, top, x, bottom, fill="#e6e5df")
+            canvas.create_text(x, bottom + 16, text=f"{start + index * 2:.0f}s", fill="#696965", font=("Consolas", 9))
+        canvas.create_text(10, 8, text="°", anchor="nw", fill="#696965")
+        for label, field, color, legend_x, dash in (("目标", "target", "#191919", 70, (6, 4)),
+                ("实测", "measured", "#d52b1e", 170, ()), ("误差", "error", "#777772", 270, (2, 4))):
+            canvas.create_line(legend_x, 8, legend_x + 22, 8, fill=color, width=2, dash=dash)
+            canvas.create_text(legend_x + 28, 8, text=label, fill=color, anchor="w", font=("Microsoft YaHei UI", 9))
             coordinates = [coord for t, sample in visible for coord in xy(t, getattr(sample, field))]
             if len(coordinates) >= 4:
-                canvas.create_line(*coordinates, fill=color, width=2)
+                canvas.create_line(*coordinates, fill=color, width=2, dash=dash)
+        if not visible:
+            canvas.create_text((left + right) / 2, (top + bottom) / 2 - 12,
+                               text="等待 TRACE 数据", fill="#696965", font=("Microsoft YaHei UI", 14))
+            canvas.create_text((left + right) / 2, (top + bottom) / 2 + 16,
+                               text="连接设备后，点击 TRACE ON", fill="#696965", font=("Microsoft YaHei UI", 10))
 
     def _toggle_log(self):
         if self.csv_file:
