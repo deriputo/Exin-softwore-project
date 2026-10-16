@@ -59,6 +59,8 @@ void Control_DefaultConfig(ControlConfig *config)
     config->follow_filter_seconds = 0.15f;
     config->direct_position_gain = 0.5f;
     config->actuator_time_constant_seconds = 0.30f;
+    config->direct_rate_gain_seconds = 0.0f;
+    config->direct_rate_limit_deg = 0.0f;
 }
 
 static uint8_t ConfigValid(const ControlConfig *config)
@@ -93,7 +95,12 @@ static uint8_t ConfigValid(const ControlConfig *config)
         config->direct_position_gain <= 2.0f &&
         NumberValid(config->actuator_time_constant_seconds) &&
         config->actuator_time_constant_seconds >= 0.02f &&
-        config->actuator_time_constant_seconds <= 2.0f);
+        config->actuator_time_constant_seconds <= 2.0f &&
+        NumberValid(config->direct_rate_gain_seconds) && config->direct_rate_gain_seconds >= 0.0f &&
+        config->direct_rate_gain_seconds <= 1.0f &&
+        NumberValid(config->direct_rate_limit_deg) && config->direct_rate_limit_deg >= 0.0f &&
+        config->direct_rate_limit_deg <= 30.0f &&
+        (config->direct_rate_gain_seconds == 0.0f || config->direct_rate_limit_deg > 0.0f));
 }
 
 void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms)
@@ -235,6 +242,9 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
         error = control->state.target_deg - measured;
         control->state.error_deg = error;
         control->state.i_term = control->state.d_term = 0.0f;
+        control->filtered_rate_dps += dt / (0.05f + dt) *
+            ((control->have_previous ? (measured - control->previous_measured) / dt : 0.0f) -
+             control->filtered_rate_dps);
         if (Abs(error) <= control->config.deadband_deg) {
             /* Keep the achieved command: returning to the lagging estimate
                here would undo a successful correction. */
@@ -242,8 +252,11 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
             raw_output = control->state.output_angle_deg;
         } else {
             control->state.p_term = control->config.direct_position_gain * error;
+            control->state.d_term = Clamp(-control->config.direct_rate_gain_seconds *
+                control->filtered_rate_dps, -control->config.direct_rate_limit_deg,
+                control->config.direct_rate_limit_deg);
             raw_output = control->estimated_actuator_deg +
-                (float)control->config.direction * control->state.p_term;
+                (float)control->config.direction * (control->state.p_term + control->state.d_term);
         }
         limit = control->config.slew_deg_per_second * dt;
         output = Clamp(Clamp(raw_output, output_low, output_high),

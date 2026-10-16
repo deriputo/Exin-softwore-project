@@ -4,6 +4,15 @@
 #include <stdio.h>
 
 static float Abs(float x) { return x < 0 ? -x : x; }
+static float StepCorrection(void)
+{
+    float rate = APP_DIRECT_RATE_GAIN_SECONDS * 5.0f / 0.07f;
+    float correction;
+    if (rate > APP_DIRECT_RATE_LIMIT_DEG) rate = APP_DIRECT_RATE_LIMIT_DEG;
+    correction = APP_DIRECT_POSITION_GAIN * 5.0f + rate;
+    if (correction > 3.6f) correction = 3.6f;
+    return correction;
+}
 static ControlSample Sample(float angle, uint32_t now)
 {
     ControlSample s = {0, 0, 0, 1};
@@ -23,6 +32,8 @@ static ControlConfig Config(ControlMode mode)
     c.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
     c.direct_position_gain = APP_DIRECT_POSITION_GAIN;
     c.actuator_time_constant_seconds = APP_ACTUATOR_TIME_CONSTANT_SECONDS;
+    c.direct_rate_gain_seconds = APP_DIRECT_RATE_GAIN_SECONDS;
+    c.direct_rate_limit_deg = APP_DIRECT_RATE_LIMIT_DEG;
     return c;
 }
 
@@ -57,7 +68,11 @@ static Result Scenario(ControlMode mode, float base_step, float tau, float gain,
         assert(c.state.output_angle_deg >= 0 && c.state.output_angle_deg <= 180);
         assert(Abs(c.state.output_angle_deg - output_before) <= 3.601f);
         assert(c.estimated_actuator_deg >= 0 && c.estimated_actuator_deg <= 180);
-        if (mode == CONTROL_MODE_DIRECT) assert(c.state.i_term == 0 && c.state.d_term == 0);
+        if (mode == CONTROL_MODE_DIRECT) {
+            assert(c.state.i_term == 0);
+            assert(Abs(c.state.d_term) <= cfg.direct_rate_limit_deg);
+            if (Abs(c.state.error_deg) <= cfg.deadband_deg) assert(c.state.d_term == 0);
+        }
         output_before = c.state.output_angle_deg;
         if (now >= 1000) {
             cross = base_step > 0 ? 90 - y : y - 90;
@@ -85,8 +100,8 @@ int main(void)
     retained = c.state.pulse_us;
     s = Sample(90, 20); assert(Control_Update(&c, &s, 20) == retained);
     s = Sample(85, 40); (void)Control_Update(&c, &s, 40);
-    assert(Abs(c.state.output_angle_deg - (130 - APP_DIRECT_POSITION_GAIN * 5)) < 0.001f);
-    assert(c.state.i_term == 0 && c.state.d_term == 0);
+    assert(Abs(c.state.output_angle_deg - (130 - StepCorrection())) < 0.001f);
+    assert(c.state.i_term == 0 && c.state.d_term == APP_DIRECT_RATE_LIMIT_DEG);
     assert(Control_StartHold(&c, &s, 40) == CONTROL_OK);
     assert(c.state.target_deg == 90 && c.bias_angle_deg == 130);
     estimate = c.estimated_actuator_deg;
@@ -108,6 +123,7 @@ int main(void)
     assert(Control_StartHold(&c, &s, 0) == CONTROL_OK);
     assert(Control_SetTarget(&c, 100) == CONTROL_OK);
     s = Sample(90, 20); (void)Control_Update(&c, &s, 20); retained = c.state.pulse_us;
+    assert(c.state.d_term == 0); /* target change does not create a rate kick */
     assert(c.estimated_actuator_deg > c.state.output_angle_deg);
     for (now = 40; now <= 60000; now += 20) {
         s = Sample(100 + ((now / 20) % 2 ? 0.4f : -0.4f), now);
@@ -145,7 +161,7 @@ int main(void)
     assert(Control_StartHold(&c, &s, 0xfffffff0u) == CONTROL_OK);
     s.roll_deg = 85; s.timestamp_ms = 4;
     (void)Control_Update(&c, &s, 4);
-    assert(Abs(c.state.output_angle_deg - (90 + APP_DIRECT_POSITION_GAIN * 5)) < 0.001f);
+    assert(Abs(c.state.output_angle_deg - (90 + StepCorrection())) < 0.001f);
 
     /* Compare identical reference plants against the preserved PI profile. */
     {

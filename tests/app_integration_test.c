@@ -485,7 +485,7 @@ int main(void)
     if (APP_CONTROL_MODE == CONTROL_MODE_DIRECT) {
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, "HOLD Y DIRECT"));
+        assert(strstr(screen, "HOLD Y DIRECT+"));
         pose = 5.0f; Until(at + 40u);
         assert(pulse > 1500u); /* Corrected physical direction. */
         retained = pulse;

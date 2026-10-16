@@ -1,5 +1,7 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+当前待测：v0.9.0-direct-rate-test，OLED显示HOLD Y DIRECT+。位置系数0.30、估计时间常数0.12秒、速度反馈0.06秒且限幅3°，死区内关闭速度贡献并保持指令。288组模型最坏过冲1.29°；尚未实物验收，提速有限，未宣称一步到位。[本版测试步骤](docs/DIRECT_RATE_TEST.md)。下方旧版本记录仅作历史参考。
+
 2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.8.0-direct-compensation-test`新增执行器位置估计＋姿态误差DIRECT补偿，系数0.5、模型时间常数0.30秒，OLED标识HOLD Y DIRECT。旧PI实现/参数及保护保留，尚未实物验收，不能保证一步到位。OLED/分析工具保留，IMU_INVALID仍未解决。[测试步骤](docs/DIRECT_COMPENSATION_TEST.md)，[版本](docs/VERSIONS.md)。
 
 最新：0.08秒单参数候选未通过失配过冲检查，已单独保存v0.8.1-tau008-failed，不推荐烧录。当前工作区已恢复v0.8.0的0.30秒控制参数，仍有用户不满意的尾调，未宣称达标。[失败记录](docs/TAU008_FAILED_TEST.md)。

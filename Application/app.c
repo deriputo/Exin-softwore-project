@@ -498,7 +498,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);
@@ -559,6 +559,8 @@ void App_Init(uint32_t at)
     config.mode = APP_CONTROL_MODE;
     config.direct_position_gain = APP_DIRECT_POSITION_GAIN;
     config.actuator_time_constant_seconds = APP_ACTUATOR_TIME_CONSTANT_SECONDS;
+    config.direct_rate_gain_seconds = APP_DIRECT_RATE_GAIN_SECONDS;
+    config.direct_rate_limit_deg = APP_DIRECT_RATE_LIMIT_DEG;
     config.axis = APP_HOLD_AXIS;
     config.direction = APP_HOLD_DIRECTION;
     config.target_min_deg = 0.0f;

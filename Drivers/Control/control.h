@@ -49,6 +49,8 @@ typedef struct {
     float follow_filter_seconds;
     float direct_position_gain; /* Actuator degrees / attitude error degree. */
     float actuator_time_constant_seconds; /* Estimate, not position feedback. */
+    float direct_rate_gain_seconds; /* Bounded feedback from filtered attitude rate. */
+    float direct_rate_limit_deg;
 } ControlConfig;
 
 typedef struct {
