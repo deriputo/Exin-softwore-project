@@ -20,6 +20,7 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.7.0-bounded-i-test` | Kp1/Kd0；积分增益0.4～1.0、尺度4° | 用户反馈间歇挪动减少、无过冲/持续摆动，但响应仍慢，性能未完全验收 |
 | `v0.7.1-i-floor08-test` | 积分下限0.8，上限1.0、Kp1/Kd0 | 用户确认三次底座动作，仍感觉不够快；记录从峰值到1°约4秒，不满足期望 |
 | `v0.8.0-direct-compensation-test` | 新增基于执行器位置估计的DIRECT模式，补偿系数0.5、时间常数0.30秒；旧PI保留 | control_direct/control/app_integration通过，288组模型检查通过，尚未实物验收 |
+| `v0.8.1-tau008-failed` | 仅把模型时间常数改0.08秒、系数0.5不变 | 应用整合通过，直接补偿失配过冲检查失败：最坏21.70°，不推荐烧录 |
 
 当前分支为`codex/hold-response`。用户要求几乎到位、停止逐项加Ki，已授权[DIRECT独立试验版](DIRECT_COMPENSATION_TEST.md)。保留旧PI及既有保护；MCU编译烧录由用户执行。模型不保证实物一步到位，IMU_INVALID仍未解决。
 
