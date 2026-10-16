@@ -1,5 +1,7 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+当前独立试验版v0.15.0-imu-bridge200-test：用户批准将可信重力中断时的陀螺仪接续预算100→200ms。OLED为HOLD Y S200，RAW新增BUDGET=200；平滑死区、PID及其他异常保护保持。23项主机回归通过，真实抗中断与漂移待验收。旧v0.14.0保留，见[本轮说明](docs/IMU_BRIDGE200_TEST.md)。下文其他版本为历史记录。
+
 当前试验版v0.14.0-smooth-deadband-test：OLED显示HOLD Y SOFT。保留0.5°死区，在0.5～0.8°平滑接入P/I，较大误差力度、D和IMU条件不变；23项主机回归通过，实物抗抖与尾段速度待验收。上一版v0.13.0独立保留。见[本轮测试](docs/SMOOTH_DEADBAND_TEST.md)，下文其他版本为历史记录。
 
 当前试验版v0.13.0-imu-settle-test：OLED显示HOLD Y SETTLE。根据手动测试的尾段姿态回落，新增有静止质量门控、限幅的单轴重力校正加速，PID参数不变；真实效果待用户验证。前版v0.12.3已保留，见[本轮测试](docs/IMU_SETTLE_TEST.md)。下文其他版本为历史记录。

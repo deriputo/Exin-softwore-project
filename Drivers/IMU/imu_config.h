@@ -18,7 +18,9 @@
 #define IMU_SETTLE_INNOVATION_DEG 2.0f
 #define IMU_SETTLE_TAU_SECONDS 0.10f
 #define IMU_SETTLE_MAX_CORRECTION_DPS 6.0f
-#define IMU_GYRO_BRIDGE_MS 100u
+/* Independent trial: tolerate up to 200ms without trusted gravity, but keep
+   the separate 100ms maximum integration gap and all hard-invalid checks. */
+#define IMU_GYRO_BRIDGE_MS 200u
 #define IMU_GYRO_SATURATION_RAW 32700
 /* Actual rod mount: mechanism (X,Y,Z) = sensor (X,Z,-Y). */
 #define IMU_MOUNT_ROTATE_X_90 1u

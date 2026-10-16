@@ -512,7 +512,7 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? "HOLD Y SOFT" : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : "HOLD Y PIDR3"));
+        assert(strstr(screen, APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? "HOLD Y S200" : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
@@ -542,10 +542,11 @@ int main(void)
     imu_gyro_only = true; imu_gravity_age = 50;
     Feed("IMU RAW ?\n"); Until(at + 50u);
     assert(strstr(tx, "MODE=GYRO REFAGE=50"));
-    imu_invalid_data = true; imu_gravity_age = 110;
+    assert(strstr(tx, "BUDGET=200"));
+    imu_invalid_data = true; imu_gravity_age = IMU_GYRO_BRIDGE_MS + 10u;
     Until(at + 30u); retained = pulse;
     Feed("IMU FAULT ?\n"); Until(at + 50u);
-    assert(strstr(tx, "SRC=\"GRAVITY_TIMEOUT\"") && strstr(tx, "REFAGE=110"));
+    assert(strstr(tx, "SRC=\"GRAVITY_TIMEOUT\"") && strstr(tx, "REFAGE=210"));
     imu_invalid_data = false; imu_gyro_only = false; imu_gravity_age = 0;
     Feed("SERVO HOLD ?\nIMU RAW ?\n"); Until(at + 50u);
     assert(strstr(tx, "HOLD=ON FAULT=IMU_INVALID") && strstr(tx, "MODE=ACC REFAGE=0"));

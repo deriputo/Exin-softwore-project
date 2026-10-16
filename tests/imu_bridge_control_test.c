@@ -57,7 +57,7 @@ int main(void)
 #else
     Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 6550);
 #endif
-    for (i = 0; i < 10; ++i) {
+    for (i = 0; i < IMU_GYRO_BRIDGE_MS / 10u; ++i) {
         IMUCore_Update(&core, raw, now += 10, &imu); s = Input(&imu);
         (void)Control_Update(&c, &s, now);
         assert(imu.valid && imu.gyro_only && c.state.fault == CONTROL_FAULT_NONE);
@@ -71,8 +71,23 @@ int main(void)
     assert(Control_Update(&c, &s, now) == held && c.state.fault == CONTROL_FAULT_IMU_INVALID);
     assert(Control_StartHold(&c, &s, now) == CONTROL_FAULT_LATCHED);
     Control_StopHold(&c); assert(Control_StartHold(&c, &s, now) == CONTROL_OK);
+    /* Recovery at110ms must continue HOLD without resetting/rearming it. */
+#if IMU_MOUNT_ROTATE_X_90
+    Word(raw + 2, -21299);
+#else
+    Word(raw + 4, 21299);
+#endif
+    for (i = 0; i < 11; ++i) {
+        IMUCore_Update(&core, raw, now += 10, &imu); s = Input(&imu);
+        (void)Control_Update(&c, &s, now);
+        assert(imu.valid && imu.gyro_only && c.state.fault == CONTROL_FAULT_NONE);
+    }
+    Gravity(raw); IMUCore_Update(&core, raw, now += 10, &imu); s = Input(&imu);
+    (void)Control_Update(&c, &s, now);
+    assert(imu.valid && imu.accel_trusted && c.state.hold_enabled && c.state.fault == CONTROL_FAULT_NONE);
+    held = c.state.pulse_us;
     memset(raw, 0, 14); IMUCore_Update(&core, raw, now += 10, &imu); s = Input(&imu);
     assert(Control_Update(&c, &s, now) == held && c.state.fault == CONTROL_FAULT_IMU_INVALID);
-    puts("PASS: real IMU fusion -> HOLD continuity <=100ms, timeout latch, no auto rearm, hard zero rejection");
+    printf("PASS: real IMU fusion -> HOLD continuity <=%ums, timeout latch, no auto rearm, hard zero rejection\n", (unsigned int)IMU_GYRO_BRIDGE_MS);
     return 0;
 }

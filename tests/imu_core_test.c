@@ -38,19 +38,19 @@ static void BridgeTests(void)
     /* Same low gravity-plane projection as the user's fault record, encoded
        in mechanism axes; 100dps around the selected Y axis. */
     Word(raw, -1360); Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 6550);
-    for (i = 1; i <= 10; ++i) {
+    for (i = 1; i <= IMU_GYRO_BRIDGE_MS / 10u; ++i) {
         Update(&core, raw, now = start + i * 10u, &s);
         assert(s.valid && s.gyro_only && !s.accel_trusted);
         assert(s.gravity_age_ms == i * 10u && fabsf(s.pitch_deg - i) < .01f);
     }
     Update(&core, raw, now += 10u, &s);
-    assert(!s.valid && !s.gyro_only && s.gravity_age_ms == 110);
-    assert(s.gyro_bridge_count == 10);
-    assert(fabsf(s.pitch_deg - 10) < .01f); /* Expired bridge does not keep integrating. */
+    assert(!s.valid && !s.gyro_only && s.gravity_age_ms == IMU_GYRO_BRIDGE_MS + 10u);
+    assert(s.gyro_bridge_count == IMU_GYRO_BRIDGE_MS / 10u);
+    assert(fabsf(s.pitch_deg - IMU_GYRO_BRIDGE_MS / 10.0f) < .01f); /* Expired bridge does not keep integrating. */
     memset(raw, 0, 14); Word(raw + 4, 16384); Update(&core, raw, now += 10u, &s);
     assert(s.valid && s.accel_trusted && !s.gyro_only && s.gravity_age_ms == 0);
     assert(fabsf(s.pitch_deg) < .01f); /* Reacquire only from trusted gravity. */
-    assert(s.gyro_bridge_count == 10);
+    assert(s.gyro_bridge_count == IMU_GYRO_BRIDGE_MS / 10u);
     Word(raw + 4, 2834); Update(&core, raw, now += 10u, &s);
     assert(s.valid && s.gyro_only);
     Word(raw + 4, 16384); Update(&core, raw, now += 10u, &s);
@@ -59,8 +59,11 @@ static void BridgeTests(void)
     /* Plausible projection alone is insufficient: sustained nongravity norm
        cannot refresh the budget. A short interval still has gyro continuity. */
     Word(raw + 4, 21299); start = now;
-    Update(&core, raw, now += 10u, &s); assert(s.valid && s.gyro_only);
-    Update(&core, raw, now = start + 110u, &s); assert(!s.valid);
+    for (i = 1; i <= IMU_GYRO_BRIDGE_MS / 10u; ++i) {
+        Update(&core, raw, now = start + i * 10u, &s);
+        assert(s.valid && s.gyro_only && s.gravity_age_ms == i * 10u);
+    }
+    Update(&core, raw, now += 10u, &s); assert(!s.valid);
 
     Calibrate(&core, raw, &now, &s);
     memset(raw, 0, 14); Update(&core, raw, now += 10u, &s);
@@ -78,8 +81,13 @@ static void BridgeTests(void)
 
     Calibrate(&core, raw, &now, &s); Update(&core, raw, now = 0xfffffff0u, &s);
     assert(s.valid); Word(raw + 4, 2834);
-    Update(&core, raw, now + 20u, &s); assert(s.valid && s.gyro_only && s.gravity_age_ms == 20);
-    Update(&core, raw, now + 101u, &s); assert(!s.valid && s.gravity_age_ms == 101);
+    start = now;
+    for (i = 1; i <= IMU_GYRO_BRIDGE_MS / 10u; ++i) {
+        Update(&core, raw, now = start + i * 10u, &s);
+        assert(s.valid && s.gyro_only && s.gravity_age_ms == i * 10u);
+    }
+    Update(&core, raw, now += 10u, &s);
+    assert(!s.valid && s.gravity_age_ms == IMU_GYRO_BRIDGE_MS + 10u);
 
     IMUCore_Init(&core); memset(raw, 0, 14); Word(raw + 4, 2834);
     Update(&core, raw, 10, &s); assert(!s.valid && !s.calibrated);
@@ -87,6 +95,39 @@ static void BridgeTests(void)
     Word(raw + 4, 16384); Update(&core, raw, 20, &s);
     assert(!s.calibrated); Word(raw + 4, 2834); Update(&core, raw, 30, &s);
     assert(!s.valid); /* No gyro-only bridge before calibration. */
+}
+static void FaultNormBridgeTests(void)
+{
+    IMUCore core; IMUSample s; uint8_t raw[14]; uint32_t now = 0, start;
+    unsigned int i;
+    Calibrate(&core, raw, &now, &s); start = now;
+    /* The user's fault acceleration, expressed in mechanism axes. With the
+       actual X90 mounting the wire frame is AX370/AY1186/AZ40mg (~1.243g).
+       Gyro100dps is synthetic; the fault snapshot did not record gyro values. */
+    Word(raw, 6062); Word(raw + 2, 655); Word(raw + 4, -19431); Word(raw + 10, 6550);
+    for (i = 1; i <= 20; ++i) {
+        Update(&core, raw, now += 10u, &s);
+        assert(s.valid && s.gyro_only && !s.accel_trusted && !s.settling_fast);
+        assert(!s.gyro_saturated && s.gravity_age_ms == i * 10u);
+        assert(fabsf(s.pitch_deg - i) < .01f); /* No bad-gravity correction. */
+        if (i == 11) assert(s.gravity_age_ms == 110u);
+    }
+    assert(now - start == 200u && s.valid);
+    Update(&core, raw, now += 1u, &s);
+    assert(!s.valid && s.gravity_age_ms == 201u && fabsf(s.pitch_deg - 20) < .01f);
+
+    /* Short interruption recovers and refreshes the budget only on gravity,
+       not on each new rejected acceleration sample. */
+    Calibrate(&core, raw, &now, &s); Word(raw + 4, 21299);
+    for (i = 0; i < 11; ++i) Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.gyro_only && s.gravity_age_ms == 110u);
+    Word(raw + 4, 16384); Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.accel_trusted && !s.gyro_only && s.gravity_age_ms == 0);
+    Word(raw + 4, 21299);
+    for (i = 0; i < 20; ++i) Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.gravity_age_ms == 200u);
+    Update(&core, raw, now += 10u, &s); assert(!s.valid && s.gravity_age_ms == 210u);
+    puts("PASS: user fault acceleration shape stays gyro-only at110/200ms, invalid at201ms; trusted recovery refreshes bounded budget, expires at210ms");
 }
 static void SettlingTests(void)
 {
@@ -209,6 +250,7 @@ int main(void)
     Update(&core, raw, now += 10u, &sample); assert(sample.valid && sample.gyro_only);
     Update(&core, raw, now += 101u, &sample); assert(!sample.valid);
     BridgeTests();
+    FaultNormBridgeTests();
     SettlingTests();
     puts("PASS: IMU calibration/fusion, bounded gyro bridge, timeout/recovery, zero/clipped/gapped frames and rollover");
     return 0;

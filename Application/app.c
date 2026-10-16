@@ -331,7 +331,7 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         Decimal(y, sizeof(y), imu_sample.gyro_y_dps, 1);
         Decimal(z, sizeof(z), imu_sample.gyro_z_dps, 1);
         (void)snprintf(reply, cap,
-            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s MODE=%s REFAGE=%lu BRIDGE=%lu SETTLE=%u\r\n",
+            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s MODE=%s REFAGE=%lu BRIDGE=%lu SETTLE=%u BUDGET=%u\r\n",
             (long)Protocol_FloatToTenths(imu_sample.accel_x_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_y_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_z_g * 100.0f), x, y, z,
@@ -340,7 +340,8 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
             IMU_GetFaultReason()[0] ? IMU_GetFaultReason() : "NONE",
             !imu_sample.valid ? "INVALID" : (imu_sample.gyro_only ? "GYRO" : "ACC"),
             (unsigned long)imu_sample.gravity_age_ms, (unsigned long)imu_sample.gyro_bridge_count,
-            (unsigned int)(imu_sample.valid && imu_sample.settling_fast));
+            (unsigned int)(imu_sample.valid && imu_sample.settling_fast),
+            (unsigned int)IMU_GYRO_BRIDGE_MS);
         break;
     case PROTOCOL_CMD_IMU_FAULT_QUERY:
         if (!hold_fault.captured) {
@@ -514,7 +515,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? "HOLD Y SOFT" : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? "HOLD Y S200" : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);
