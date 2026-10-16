@@ -16,13 +16,14 @@ static ControlSample Sample(float roll, float pitch, uint32_t now)
 
 /* Same 8deg base step and first-order actuator for old/new tuning. This tests
    relative recovery and safety; it does not predict real SG90 settling time. */
-static uint32_t RecoveryWithScaleMs(float kp, float ki, float slew, float scale)
+static uint32_t RecoveryProfileMs(float kp, float ki, float slew, float scale,
+                                 float base_step, uint8_t legacy_decay)
 {
     Control control;
     ControlConfig config;
     ControlSample sample;
     float plant = 90, previous = 90;
-    uint32_t now, stable = 0;
+    uint32_t now, stable = 0, recovery = 60000;
     Control_DefaultConfig(&config);
     config.axis = CONTROL_AXIS_PITCH;
     config.direction = APP_HOLD_DIRECTION;
@@ -30,26 +31,40 @@ static uint32_t RecoveryWithScaleMs(float kp, float ki, float slew, float scale)
     config.integral_limit_deg = 180;
     config.kp = kp; config.ki = ki; config.kd = APP_HOLD_KD;
     config.integral_error_scale_deg = scale;
+    config.integral_min_ki = scale > 0.0f ? APP_HOLD_INTEGRAL_MIN_KI : 0.0f;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.slew_deg_per_second = slew;
     Control_Init(&control, &config, 0);
     sample = Sample(0, plant, 0);
     assert(Control_StartHold(&control, &sample, 0) == CONTROL_OK);
     for (now = 20; now <= 60000; now += 20) {
-        float base = now >= 1000 ? 8.0f : 0.0f;
+        float base = now >= 1000 ? base_step : 0.0f;
         /* Observed physical mount: increasing output decreases ground Pitch. */
         plant += 0.08f * (base + 180.0f - control.state.output_angle_deg - plant);
         sample = Sample(0, plant, now);
+        if (legacy_decay) {
+            float ratio = (90.0f - plant) / 8.0f;
+            control.config.ki = 0.5f / (1.0f + ratio * ratio);
+        }
         (void)Control_Update(&control, &sample, now);
         assert(control.state.fault == CONTROL_FAULT_NONE);
         assert(control.state.output_angle_deg >= 0 && control.state.output_angle_deg <= 180);
         assert(Abs(control.state.output_angle_deg - previous) <= slew * 0.02f + 0.001f);
         previous = control.state.output_angle_deg;
         if (now >= 1000 && Abs(plant - 90) <= 1.0f) stable += 20;
-        else stable = 0;
-        if (stable >= 1000) return now - 1000;
+        else { stable = 0; recovery = 60000; }
+        if (stable >= 1000 && recovery == 60000) recovery = now - 1000;
+        if (now >= 1000) {
+            /* Bound model overshoot to 1deg on the far side of target. */
+            assert(base_step >= 0.0f ? plant >= 89.0f : plant <= 91.0f);
+        }
     }
-    return 60000;
+    return recovery;
+}
+
+static uint32_t RecoveryWithScaleMs(float kp, float ki, float slew, float scale)
+{
+    return RecoveryProfileMs(kp, ki, slew, scale, 8.0f, 0);
 }
 
 static uint32_t RecoveryMs(float kp, float ki, float slew)
@@ -214,6 +229,7 @@ int main(void)
         config.integral_limit_deg = 180; config.kp = APP_HOLD_KP; config.ki = APP_HOLD_KI;
         config.kd = APP_HOLD_KD; config.deadband_deg = APP_HOLD_DEADBAND_DEG;
         config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
+        config.integral_min_ki = APP_HOLD_INTEGRAL_MIN_KI;
         config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
         config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
         for (index = 0; index < sizeof(targets)/sizeof(targets[0]); ++index) {
@@ -239,6 +255,19 @@ int main(void)
                 /* PD diagnosis is allowed a steady-state offset. */
                 assert(control.state.i_term == 0.0f);
             }
+        }
+    }
+    {
+        const float steps[] = {-30, -8, 8, 30};
+        unsigned int index;
+        for (index = 0; index < sizeof(steps)/sizeof(steps[0]); ++index) {
+            uint32_t old_ms = RecoveryProfileMs(1.0f, 0.5f, 180.0f, 0, steps[index], 1);
+            uint32_t new_ms = RecoveryProfileMs(APP_HOLD_KP, APP_HOLD_KI,
+                APP_HOLD_SLEW_DEG_PER_SECOND, APP_HOLD_INTEGRAL_ERROR_SCALE_DEG, steps[index], 0);
+            assert(new_ms < 20000u);
+            assert(new_ms < old_ms);
+            printf("Base step %.0fdeg: previous decay=%lu ms, bounded I=%lu ms (incl 1s dwell)\n",
+                (double)steps[index], (unsigned long)old_ms, (unsigned long)new_ms);
         }
     }
     {
@@ -279,13 +308,17 @@ int main(void)
         Control_DefaultConfig(&config);
         config.axis = CONTROL_AXIS_PITCH; config.direction = -1;
         config.target_min_deg = 0; config.target_limit_deg = 180;
-        config.kp = config.kd = 0; config.ki = 0.8f; /* Keep nonlinear function tests nonzero. */
+        config.kp = config.kd = 0; config.ki = 0.8f;
+        config.integral_min_ki = 0.2f;
         config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
         config.deadband_deg = APP_HOLD_DEADBAND_DEG;
         for (index = 0; index < sizeof(errors)/sizeof(errors[0]); ++index) {
             float error = Abs(errors[index]) <= config.deadband_deg ? 0 : errors[index];
             float ratio = error / config.integral_error_scale_deg;
-            float expected = config.ki * error * 0.02f / (1 + ratio * ratio);
+            float gain = config.integral_min_ki + (config.ki - config.integral_min_ki) *
+                ratio * ratio / (1 + ratio * ratio);
+            float expected = gain * error * 0.02f;
+            assert(gain >= config.integral_min_ki && gain <= config.ki);
             Control_Init(&control, &config, 0); sample = Sample(0, 90, 0);
             assert(Control_StartHold(&control, &sample, 0) == CONTROL_OK);
             sample = Sample(0, 90 - errors[index], 20);

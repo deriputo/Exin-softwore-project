@@ -16,9 +16,10 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.6.2-ki0-diagnostic` | Ki0、Kp1.6、Kd0.02静止对照 | 用户反馈静止仍左右摆动，尚不能确定P/D或测量波动根因 |
 | `v0.6.3-kp10-ki0-diagnostic` | Kp1.0、Ki0、Kd0.02 | 用户反馈静止仍左右摆动 |
 | `v0.6.4-p-only-diagnostic` | Kp1.0/Ki0/Kd0纯比例对照 | 用户确认水平及受扰后无明显摆动，受扰残差约5.9°；不算完整定角通过 |
-| `v0.6.5-pi05-no-d-test` | 保留Kp1/Kd0，仅恢复Ki峰值0.5的变速积分 | control/app_integration通过，待稳定消差验收，不作为提速版 |
+| `v0.6.5-pi05-no-d-test` | Kp1/Kd0，Ki_eff=0.5/[1+(e/8)^2] | 用户确认后段停稳，小角度消差有效；大角度仍缓慢间歇挪动，提速未通过 |
+| `v0.7.0-bounded-i-test` | 保留Kp1/Kd0；积分增益0.4～1.0、尺度4°，大误差不再衰减到零 | control/app_integration通过，±8/±30度模型改善，待实物静止及分级倾角验收 |
 
-当前分支为`codex/hold-response`。纯比例的水平及受扰后摆动测试通过，但残差未消除。现进入[保留D0、恢复小力度积分](PI05_NO_D_TEST.md)，先验证稳定消差。每版单独提交、打标签并备份；MCU编译烧录由用户执行。IMU_INVALID仍未解决。
+当前分支为`codex/hold-response`。用户确认记录正常，大角度慢速间歇纠偏仍存在；现进入[有上下限的积分调度](BOUNDED_I_TEST.md)，保留Kp1/D0。每版单独提交、打标签并备份；MCU编译烧录由用户执行。IMU_INVALID仍未解决。
 
 ## 查看代码
 

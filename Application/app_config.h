@@ -15,10 +15,10 @@
 /* Exam mode: full travel PID. Optional commissioning preset stays disabled. */
 #define APP_HOLD_DIAGNOSTIC 0
 #define APP_HOLD_NORMAL_KP 1.0f
-/* Smooth variable integration: Ki_eff = Ki / (1 + (error / scale)^2). */
-/* Restore modest variable integration after pure-P static acceptance. */
-#define APP_HOLD_NORMAL_KI 0.5f
-#define APP_HOLD_INTEGRAL_ERROR_SCALE_DEG 8.0f
+/* Ki_eff = min + (max-min) * e^2/(e^2+scale^2). */
+#define APP_HOLD_NORMAL_KI 1.0f
+#define APP_HOLD_INTEGRAL_MIN_KI 0.4f
+#define APP_HOLD_INTEGRAL_ERROR_SCALE_DEG 4.0f
 /* Keep derivative disabled during integral reintroduction. */
 #define APP_HOLD_NORMAL_KD 0.0f
 #if APP_HOLD_DIAGNOSTIC

@@ -42,6 +42,7 @@ void Control_DefaultConfig(ControlConfig *config)
     config->ki = 0.4f;
     config->kd = 0.06f;
     config->integral_error_scale_deg = 0.0f;
+    config->integral_min_ki = 0.0f;
     config->deadband_deg = 0.3f;
     config->target_limit_deg = 60.0f;
     config->target_min_deg = -60.0f;
@@ -65,6 +66,8 @@ static uint8_t ConfigValid(const ControlConfig *config)
         NumberValid(config->kd) && config->kd >= 0.0f &&
         NumberValid(config->integral_error_scale_deg) && config->integral_error_scale_deg >= 0.0f &&
         config->integral_error_scale_deg <= 180.0f &&
+        NumberValid(config->integral_min_ki) && config->integral_min_ki >= 0.0f &&
+        config->integral_min_ki <= config->ki &&
         NumberValid(config->deadband_deg) && config->deadband_deg >= 0.0f &&
         NumberValid(config->target_limit_deg) && config->target_limit_deg > 0.0f &&
         config->target_limit_deg <= 180.0f &&
@@ -251,7 +254,9 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
     integral_gain = control->config.ki;
     if (control->config.integral_error_scale_deg > 0.0f) {
         float ratio = error / control->config.integral_error_scale_deg;
-        integral_gain /= 1.0f + ratio * ratio;
+        float weight = ratio * ratio / (1.0f + ratio * ratio);
+        integral_gain = control->config.integral_min_ki +
+            (control->config.ki - control->config.integral_min_ki) * weight;
     }
     candidate_i = Clamp(control->state.i_term + integral_gain * error * dt,
         -control->config.integral_limit_deg, control->config.integral_limit_deg);
