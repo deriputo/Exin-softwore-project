@@ -30,6 +30,7 @@ typedef struct {
     float kp;
     float ki;
     float kd;
+    float integral_error_scale_deg; /* 0: constant Ki; >0: Ki/(1+(error/scale)^2). */
     float deadband_deg;
     float target_limit_deg;
     float target_min_deg;

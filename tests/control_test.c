@@ -16,7 +16,7 @@ static ControlSample Sample(float roll, float pitch, uint32_t now)
 
 /* Same 8deg base step and first-order actuator for old/new tuning. This tests
    relative recovery and safety; it does not predict real SG90 settling time. */
-static uint32_t RecoveryMs(float kp, float ki, float slew)
+static uint32_t RecoveryWithScaleMs(float kp, float ki, float slew, float scale)
 {
     Control control;
     ControlConfig config;
@@ -29,6 +29,7 @@ static uint32_t RecoveryMs(float kp, float ki, float slew)
     config.target_min_deg = 0; config.target_limit_deg = 180;
     config.integral_limit_deg = 180;
     config.kp = kp; config.ki = ki; config.kd = APP_HOLD_KD;
+    config.integral_error_scale_deg = scale;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.slew_deg_per_second = slew;
     Control_Init(&control, &config, 0);
@@ -49,6 +50,11 @@ static uint32_t RecoveryMs(float kp, float ki, float slew)
         if (stable >= 1000) return now - 1000;
     }
     return 60000;
+}
+
+static uint32_t RecoveryMs(float kp, float ki, float slew)
+{
+    return RecoveryWithScaleMs(kp, ki, slew, 0.0f);
 }
 
 int main(void)
@@ -207,6 +213,7 @@ int main(void)
         config.target_min_deg = 0; config.target_limit_deg = 180;
         config.integral_limit_deg = 180; config.kp = APP_HOLD_KP; config.ki = APP_HOLD_KI;
         config.kd = APP_HOLD_KD; config.deadband_deg = APP_HOLD_DEADBAND_DEG;
+        config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
         config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
         config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
         for (index = 0; index < sizeof(targets)/sizeof(targets[0]); ++index) {
@@ -230,10 +237,11 @@ int main(void)
         }
     }
     {
-        uint32_t baseline_ms = RecoveryMs(APP_HOLD_KP, 0.25f, APP_HOLD_SLEW_DEG_PER_SECOND);
-        uint32_t normal_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI, APP_HOLD_SLEW_DEG_PER_SECOND);
+        uint32_t baseline_ms = RecoveryMs(0.8f, 0.5f, APP_HOLD_SLEW_DEG_PER_SECOND);
+        uint32_t normal_ms = RecoveryWithScaleMs(APP_HOLD_KP, APP_HOLD_KI,
+            APP_HOLD_SLEW_DEG_PER_SECOND, APP_HOLD_INTEGRAL_ERROR_SCALE_DEG);
         assert(normal_ms < baseline_ms && normal_ms < 20000u);
-        printf("Simulated 8deg base-step recovery (includes 1s dwell): Ki0.25=%lu ms, trialKi=%lu ms\n",
+        printf("Simulated 8deg step incl 1s dwell: oldPI=%lu ms, nonlinearPI=%lu ms\n",
                (unsigned long)baseline_ms, (unsigned long)normal_ms);
     }
     Control_DefaultConfig(&config); config.axis = CONTROL_AXIS_PITCH;
@@ -250,6 +258,40 @@ int main(void)
         assert(control.state.i_term == 0 && control.state.d_term == 0);
         assert(control.state.saturated && control.state.fault == CONTROL_FAULT_NONE);
     }
-    puts("PASS: PID0..180 target limits, simulated base disturbance recovery, filtered D and legacy core modes");
+    {
+        const float errors[] = {-60, -16, -8, -1, -0.5f, 0, 0.4f, 1, 8, 16, 60};
+        unsigned int index;
+        Control_DefaultConfig(&config);
+        config.axis = CONTROL_AXIS_PITCH; config.direction = -1;
+        config.target_min_deg = 0; config.target_limit_deg = 180;
+        config.kp = config.kd = 0; config.ki = APP_HOLD_KI;
+        config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
+        config.deadband_deg = APP_HOLD_DEADBAND_DEG;
+        for (index = 0; index < sizeof(errors)/sizeof(errors[0]); ++index) {
+            float error = Abs(errors[index]) <= config.deadband_deg ? 0 : errors[index];
+            float ratio = error / config.integral_error_scale_deg;
+            float expected = config.ki * error * 0.02f / (1 + ratio * ratio);
+            Control_Init(&control, &config, 0); sample = Sample(0, 90, 0);
+            assert(Control_StartHold(&control, &sample, 0) == CONTROL_OK);
+            sample = Sample(0, 90 - errors[index], 20);
+            (void)Control_Update(&control, &sample, 20);
+            assert(Abs(control.state.i_term - expected) < 0.00001f);
+            assert(control.state.fault == CONTROL_FAULT_NONE);
+        }
+        Control_Init(&control, &config, 0); sample = Sample(0, 90, 0);
+        assert(Control_StartHold(&control, &sample, 0) == CONTROL_OK);
+        for (now = 20; now <= 60000; now += 20) {
+            sample = Sample(0, 90 + ((now / 20) % 2 ? 0.4f : -0.4f), now);
+            assert(Control_Update(&control, &sample, now) == 1500);
+            assert(control.state.i_term == 0);
+        }
+        /* Fault protection still locks the final pulse with nonlinear I active. */
+        sample.valid = 0;
+        assert(Control_Update(&control, &sample, now) == 1500);
+        assert(control.state.fault == CONTROL_FAULT_IMU_INVALID);
+        sample = Sample(0, 50, now + 20);
+        assert(Control_Update(&control, &sample, now + 20) == 1500);
+    }
+    puts("PASS: PID target/safety, nonlinear I magnitude/sign/deadband/noise/fault latch, model recovery and legacy modes");
     return 0;
 }

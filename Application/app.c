@@ -563,6 +563,7 @@ void App_Init(uint32_t at)
     config.target_limit_deg = 180.0f;
     config.integral_limit_deg = 180.0f;
     config.kp = APP_HOLD_KP; config.ki = APP_HOLD_KI; config.kd = APP_HOLD_KD;
+    config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
     config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;

@@ -41,6 +41,7 @@ void Control_DefaultConfig(ControlConfig *config)
     config->kp = 2.5f;
     config->ki = 0.4f;
     config->kd = 0.06f;
+    config->integral_error_scale_deg = 0.0f;
     config->deadband_deg = 0.3f;
     config->target_limit_deg = 60.0f;
     config->target_min_deg = -60.0f;
@@ -62,6 +63,8 @@ static uint8_t ConfigValid(const ControlConfig *config)
     return (uint8_t)(config && NumberValid(config->kp) && config->kp >= 0.0f &&
         NumberValid(config->ki) && config->ki >= 0.0f &&
         NumberValid(config->kd) && config->kd >= 0.0f &&
+        NumberValid(config->integral_error_scale_deg) && config->integral_error_scale_deg >= 0.0f &&
+        config->integral_error_scale_deg <= 180.0f &&
         NumberValid(config->deadband_deg) && config->deadband_deg >= 0.0f &&
         NumberValid(config->target_limit_deg) && config->target_limit_deg > 0.0f &&
         config->target_limit_deg <= 180.0f &&
@@ -173,7 +176,7 @@ ControlResult Control_SetTarget(Control *control, float target_deg)
 uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t now_ms)
 {
     float dt, measured, error, candidate_i, raw_output, output, limit, signed_error;
-    float output_low, output_high;
+    float output_low, output_high, integral_gain;
     uint32_t elapsed;
     if (!control) { return 1500u; }
     /* Keep telemetry live even in manual mode or with a latched controller
@@ -245,7 +248,12 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
         ((control->have_previous ? (measured - control->previous_measured) / dt : 0.0f) -
          control->filtered_rate_dps);
     control->state.d_term = -control->config.kd * control->filtered_rate_dps;
-    candidate_i = Clamp(control->state.i_term + control->config.ki * error * dt,
+    integral_gain = control->config.ki;
+    if (control->config.integral_error_scale_deg > 0.0f) {
+        float ratio = error / control->config.integral_error_scale_deg;
+        integral_gain /= 1.0f + ratio * ratio;
+    }
+    candidate_i = Clamp(control->state.i_term + integral_gain * error * dt,
         -control->config.integral_limit_deg, control->config.integral_limit_deg);
     raw_output = control->bias_angle_deg + (float)control->config.direction *
         (control->state.p_term + candidate_i + control->state.d_term);
