@@ -1,0 +1,14 @@
+{
+  "p": "0.700",
+  "ki": "8.000",
+  "kd": "0.005",
+  "filter_s": "0.000",
+  "cap_deg": "0.500",
+  "away_only": "0",
+  "eligible": "1",
+  "checked_cases": "144",
+  "max_observed_overshoot_deg": "0.943054",
+  "max_observed_entry_ms": "700",
+  "rms2_deg": "2.245490",
+  "rms4_deg": "1.226428"
+}

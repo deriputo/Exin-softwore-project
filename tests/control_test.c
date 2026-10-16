@@ -6,7 +6,7 @@
 static float Abs(float x) { return x < 0 ? -x : x; }
 static ControlSample Sample(float roll, float pitch, uint32_t now)
 {
-    ControlSample sample;
+    ControlSample sample = {0};
     sample.roll_deg = roll;
     sample.pitch_deg = pitch;
     sample.timestamp_ms = now;

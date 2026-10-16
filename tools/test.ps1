@@ -20,6 +20,7 @@ $cases = @(
     @{name='control'; sources=@('Drivers/Control/control.c')},
     @{name='control_direct'; sources=@('Drivers/Control/control.c')},
     @{name='control_position'; sources=@('Drivers/Control/control.c')},
+    @{name='control_rate'; sources=@('Drivers/Control/control.c')},
     @{name='protocol'; sources=@('Protocol/protocol.c')},
     @{name='ui_core'; sources=@('Application/ui_core.c')},
     @{name='imu_core'; sources=@('Drivers/IMU/imu_core.c')},

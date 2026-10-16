@@ -1,29 +1,6 @@
 # 单轴 IMU 姿态定角
 
-当前活动源码：v0.11.0-imu-gyro-bridge-test，OLED为HOLD Y PIDR3。用户授权加速度暂时不可信时最长100ms陀螺仪接续，超时及真实通信/采样故障仍保护。RAW追加MODE/REFAGE/BRIDGE；五项主机检查通过，未实物验收。控制参数与积分修复不变；慢速验收标签v0.10.1完整保留。 [本版步骤](../../docs/IMU_GYRO_BRIDGE_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码为v0.10.2-pidr-slew-fix-test，OLED显示HOLD Y PIDR2。只修复PID在限速时整轮拒绝积分导致的大误差冻结，P0.7/Ki6/Kd0.005与保护不变。四项主机检查通过，实物待验收；wide模型仍不合格，不能视为全部高速问题解决。用户慢速验收版独立保存在v0.10.1-pidr-slow-accepted及ZIP。 [本轮说明](../../docs/PIDR_SLEW_FIX_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码：**v0.10.0-pidr-small-angle-test**，OLED显示HOLD Y PIDR。用户已明确批准独立小角度实物试验。使用固定偏置PID，P0.7/Ki6/Kd0.005；不是小积分方案，也不是DIRECT。fast假设288组最坏过冲1.127°，但原wide范围最坏19.415°未通过；当前仅允许先做约5°测试，实物仍以2°为验收上限，尚未实物验收。由用户Keil编译烧录。[本轮步骤](../../docs/PIDR_SMALL_ANGLE_TEST.md)。
-
-以下为历史记录。
-
-当前待测为 **v0.9.1-tracking-2deg-test**：用户批准2°短暂过冲上限；位置系数0.30不变，估计时间常数0.10秒、速度贡献限幅6°。288组模型最坏过冲1.88°，12组连续跟踪模型均改善，但仍未达到紧贴目标。Keil编译烧录及实物验收由用户执行。详见docs/DIRECT_TRACKING_TEST.md。
-
-以下为历史版本说明。
-
-当前v0.9.0为DIRECT+：位置系数0.30、估计时间常数0.12秒、50ms滤波的姿态速度反馈系数0.06秒、贡献限幅±3°。死区内P/D为0且保持最后指令。TRACE I=0、D为受限速度反馈；旧PI参数未启用。DIRECT估计状态在死区外可产生相当于积分的积累，并非完全无积分尾调。详见docs/DIRECT_RATE_TEST.md；以下DIRECT无D说明为v0.8.0历史记录。
-
-2026-10-16最新应用已切到CONTROL_MODE_DIRECT试验模式，OLED显示HOLD Y DIRECT。基于上一轮限幅后指令的一阶位置估计（时间常数0.30秒）加0.5倍姿态误差补偿，方向-1；不是当前指令直接当实际位置，也不是原PID逐轮累加。到达0.5°死区后保持最后指令，既有故障/限幅/限速继续有效。旧PI/FOLLOW分支保留，以下PI参数为历史参考。完整说明和TRACE语义见docs/DIRECT_COMPENSATION_TEST.md，尚未实物验收。
-
-2026-10-16应用试验参数为Kp1、Kd0、Ki_eff=0.8+0.2*e²/(e²+4²)，Pitch/Y轴，方向-1，目标/输出0～180°，M=90+相对校准Y。用户IMU安装在连杆上，手动90°对应竖直，当前版本待实物验收。测试和曲线见docs/I_FLOOR08_TEST.md。输出限幅限速、抗积分饱和、传感器及时序故障保护保留。
-
-校准时要求底座水平且连杆在90°输出时竖直；首次实测只做80/90/100°及小扰动。FOLLOW分支保留但不启用。下文通用默认值用于核心测试，当前应用参数以Application/app_config.h和App_Init为准。
-
+当前试验版v0.12.0-gyro-rate-response-test，OLED为HOLD Y RATE：P0.7、Ki8、D系数0.005，直接使用校准后的传感器Z轴角速度，速度贡献±0.5°，静止小噪声抑制。六项主机检查通过，未实物验收；100ms陀螺仪接续和保护保留。连续跟踪模型改善约17～22%，原wide延迟模型仍不合格，不能保证实物实时跟随。上一版v0.11.1及慢速验收版v0.10.1独立保存。 [当前参数、输入契约和验证](../../docs/GYRO_RATE_RESPONSE_TEST.md)。启用use_rate_sample时，ControlSample必须提供同一采样时刻、相同控制轴符号的angular_rate_dps和angular_rate_valid；旧角差分路径默认保留。
 
 该模块不访问硬件；应用传入 IMU 的校准后 Roll/Pitch 与采样时间，取得 PWM 脉宽后调用 `ServoPWM_SetPulseUs()`。每个 `Control` 实例独立。`ControlSample.valid` 必须表示传感器已连接、完成静止校准并取得可靠姿态，不能仅表示 I²C 读取成功。
 

@@ -10,9 +10,16 @@ static void Word(uint8_t *p, int16_t n)
 }
 static ControlSample Input(const IMUSample *imu)
 {
-    ControlSample s = {0, 0, 0, 0};
+    ControlSample s = {0, 0, 0, 0, 0, 0};
     s.roll_deg = imu->roll_deg; s.pitch_deg = APP_ATTITUDE_REFERENCE_DEG + imu->pitch_deg;
-    s.timestamp_ms = imu->timestamp_ms; s.valid = imu->valid && imu->calibrated; return s;
+    s.timestamp_ms = imu->timestamp_ms; s.valid = imu->valid && imu->calibrated;
+#if IMU_MOUNT_ROTATE_X_90
+    s.angular_rate_dps = imu->gyro_z_dps;
+#else
+    s.angular_rate_dps = imu->gyro_y_dps;
+#endif
+    s.angular_rate_valid = 1;
+    return s;
 }
 static void Gravity(uint8_t raw[14])
 {
@@ -36,6 +43,11 @@ int main(void)
     cfg.kp = APP_POSITION_PID_KP; cfg.ki = APP_POSITION_PID_KI; cfg.kd = APP_POSITION_PID_KD;
     cfg.deadband_deg = APP_HOLD_DEADBAND_DEG; cfg.integral_limit_deg = 180;
     cfg.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
+#if APP_RATE_PID_TEST
+    cfg.ki = APP_RATE_PID_KI; cfg.kd = APP_RATE_PID_KD; cfg.use_rate_sample = 1;
+    cfg.rate_filter_seconds = APP_RATE_FILTER_SECONDS;
+    cfg.rate_term_limit_deg = APP_RATE_TERM_LIMIT_DEG; cfg.rate_quiet_dps = APP_RATE_QUIET_DPS;
+#endif
     Control_Init(&c, &cfg, now); s = Input(&imu);
     assert(Control_StartHold(&c, &s, now) == CONTROL_OK);
     Word(raw, -1360);

@@ -25,6 +25,8 @@ typedef struct {
     float pitch_deg;
     uint32_t timestamp_ms;
     uint8_t valid;
+    float angular_rate_dps; /* Same selected axis/sign and timestamp as attitude. */
+    uint8_t angular_rate_valid;
 } ControlSample;
 
 typedef struct {
@@ -51,6 +53,11 @@ typedef struct {
     float actuator_time_constant_seconds; /* Estimate, not position feedback. */
     float direct_rate_gain_seconds; /* Bounded feedback from filtered attitude rate. */
     float direct_rate_limit_deg;
+    uint8_t use_rate_sample; /* PID only; 0 preserves angle-difference derivative. */
+    float rate_filter_seconds;
+    float rate_term_limit_deg; /* 0: legacy unlimited D before final output limits. */
+    float rate_quiet_dps;
+    uint8_t rate_away_only; /* Assist motion away from target; no return braking. */
 } ControlConfig;
 
 typedef struct {

@@ -5,6 +5,7 @@ Keil入口：`Project/eXin.uvprojx`。
 
 | Git标签 | 含义 | 实物状态 |
 |---|---|---|
+| `v0.12.0-gyro-rate-response-test` | 校准后角速度直接反馈、Ki8、D贡献限幅±0.5°，UI为HOLD Y RATE | 六项主机检查通过；有限倾斜模型0.943°，连续模型改善，wide不通过，未实物验收 |
 | `v0.11.1-pidr3-lag-snapshot` | 用户要求单独保存当前PIDR3；固件源码与v0.11.0完全相同 | 用户反馈运动开始及停止后仍有明显滞后，未满足实时跟随；本次未改算法参数 |
 | `v0.1.0-stable` | 2026-10-15当前稳定基线；完整PID、Pitch、方向-1、目标/输出0～180°，P/I/D=0.8/0.25/0.02，限速90°/s | 用户确认最新程序已烧录且一切正常；性能指标尚未量化 |
 | `v0.2.0-slew180-test` | 第一项性能试验：仅把应用HOLD限速提高到180°/s；PID不变 | 主机测试通过；用户首轮反馈更快、无抖动/过冲/故障；补测T89.2、M89.3、恢复约0.28s，但到位后有来回摆动，待确认衰减或持续，不升级为稳定版 |
@@ -30,7 +31,9 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.9.1-tracking-2deg-test` | 2°过冲预算下跟进时间0.10秒、速度反馈贡献上限6°，位置系数0.30不变 | 三项主机检查通过；连续跟踪略改善，待用户实物验收 |
 | `v0.9.0-direct-rate-test` | DIRECT增加50ms滤波的受限速度反馈，贡献±3°，死区内关闭；系数0.30/时间常数0.12秒 | 三项主机测试通过，288组失配最坏过冲1.29°；等待用户编译烧录和静止/5°验收 |
 
-当前待测v0.11.0-imu-gyro-bridge-test，100ms限时接续已获用户授权，尚未实物验收；步骤见[IMU_GYRO_BRIDGE_TEST.md](IMU_GYRO_BRIDGE_TEST.md)。
+当前待测v0.12.0-gyro-rate-response-test；保留v0.11.1快照及v0.10.1慢速验收版。步骤见[GYRO_RATE_RESPONSE_TEST.md](GYRO_RATE_RESPONSE_TEST.md)，未实物验收。
+
+历史记录：当前待测v0.11.0-imu-gyro-bridge-test，100ms限时接续已获用户授权，尚未实物验收；步骤见[IMU_GYRO_BRIDGE_TEST.md](IMU_GYRO_BRIDGE_TEST.md)。
 
 历史记录：当前待测v0.10.2-pidr-slew-fix-test。慢速验收版v0.10.1已独立保留；见[本轮说明](PIDR_SLEW_FIX_TEST.md)。修复积分冻结，IMU_INVALID另查，未放宽保护。
 

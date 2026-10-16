@@ -7,7 +7,7 @@
 static float Abs(float x) { return x < 0 ? -x : x; }
 static ControlSample Sample(float y, uint32_t now)
 {
-    ControlSample s = {0, 0, 0, 1}; s.pitch_deg = y; s.timestamp_ms = now; return s;
+    ControlSample s = {0, 0, 0, 1, 0, 0}; s.pitch_deg = y; s.timestamp_ms = now; return s;
 }
 static ControlConfig Config(int direct)
 {

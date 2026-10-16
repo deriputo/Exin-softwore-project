@@ -16,7 +16,7 @@ static float StepCorrection(void)
 }
 static ControlSample Sample(float angle, uint32_t now)
 {
-    ControlSample s = {0, 0, 0, 1};
+    ControlSample s = {0, 0, 0, 1, 0, 0};
     s.pitch_deg = angle; s.timestamp_ms = now; return s;
 }
 static ControlConfig Config(ControlMode mode)

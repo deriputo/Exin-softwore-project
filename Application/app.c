@@ -58,6 +58,15 @@ static ControlSample Sample(void)
         sample.pitch_deg = APP_ATTITUDE_REFERENCE_DEG + imu_sample.pitch_deg;
         sample.timestamp_ms = imu_sample.timestamp_ms;
         sample.valid = (uint8_t)(imu_sample.valid && imu_sample.calibrated);
+        if (APP_HOLD_AXIS == CONTROL_AXIS_PITCH) {
+            /* Matches IMUCore tilt_pitch += mapped gyro Y * dt. */
+#if IMU_MOUNT_ROTATE_X_90
+            sample.angular_rate_dps = imu_sample.gyro_z_dps;
+#else
+            sample.angular_rate_dps = imu_sample.gyro_y_dps;
+#endif
+            sample.angular_rate_valid = 1;
+        }
     }
     return sample;
 }
@@ -504,7 +513,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_RATE_PID_TEST ? "HOLD Y RATE" : (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);
@@ -584,6 +593,14 @@ void App_Init(uint32_t at)
     config.kd = APP_POSITION_PID_KD;
     config.integral_min_ki = 0.0f;
     config.integral_error_scale_deg = 0.0f;
+#endif
+#if APP_RATE_PID_TEST
+    config.ki = APP_RATE_PID_KI;
+    config.kd = APP_RATE_PID_KD;
+    config.use_rate_sample = (APP_HOLD_AXIS == CONTROL_AXIS_PITCH);
+    config.rate_filter_seconds = APP_RATE_FILTER_SECONDS;
+    config.rate_term_limit_deg = APP_RATE_TERM_LIMIT_DEG;
+    config.rate_quiet_dps = APP_RATE_QUIET_DPS;
 #endif
     Control_Init(&control, &config, at);
     Protocol_Init(&protocol, Command, WriteProtocol, (void *)&wired_channel);

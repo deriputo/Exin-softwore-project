@@ -1,28 +1,6 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
-当前活动源码：v0.11.0-imu-gyro-bridge-test，OLED为HOLD Y PIDR3。用户授权加速度暂时不可信时最长100ms陀螺仪接续，超时及真实通信/采样故障仍保护。RAW追加MODE/REFAGE/BRIDGE；五项主机检查通过，未实物验收。控制参数与积分修复不变；慢速验收标签v0.10.1完整保留。 [本版步骤](docs/IMU_GYRO_BRIDGE_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码为v0.10.2-pidr-slew-fix-test，OLED显示HOLD Y PIDR2。只修复PID在限速时整轮拒绝积分导致的大误差冻结，P0.7/Ki6/Kd0.005与保护不变。四项主机检查通过，实物待验收；wide模型仍不合格，不能视为全部高速问题解决。用户慢速验收版独立保存在v0.10.1-pidr-slow-accepted及ZIP。 [本轮说明](docs/PIDR_SLEW_FIX_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码：**v0.10.0-pidr-small-angle-test**，OLED显示HOLD Y PIDR。用户已明确批准独立小角度实物试验。使用固定偏置PID，P0.7/Ki6/Kd0.005；不是小积分方案，也不是DIRECT。fast假设288组最坏过冲1.127°，但原wide范围最坏19.415°未通过；当前仅允许先做约5°测试，实物仍以2°为验收上限，尚未实物验收。由用户Keil编译烧录。[本轮步骤](docs/PIDR_SMALL_ANGLE_TEST.md)。
-
-以下为历史记录。
-
-当前待测为 **v0.9.1-tracking-2deg-test**：用户批准2°短暂过冲上限；位置系数0.30不变，估计时间常数0.10秒、速度贡献限幅6°。288组模型最坏过冲1.88°，12组连续跟踪模型均改善，但仍未达到紧贴目标。Keil编译烧录及实物验收由用户执行。详见docs/DIRECT_TRACKING_TEST.md。
-
-以下为历史版本说明。
-
-当前待测：v0.9.0-direct-rate-test，OLED显示HOLD Y DIRECT+。位置系数0.30、估计时间常数0.12秒、速度反馈0.06秒且限幅3°，死区内关闭速度贡献并保持指令。288组模型最坏过冲1.29°；尚未实物验收，提速有限，未宣称一步到位。[本版测试步骤](docs/DIRECT_RATE_TEST.md)。下方旧版本记录仅作历史参考。
-
-2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.8.0-direct-compensation-test`新增执行器位置估计＋姿态误差DIRECT补偿，系数0.5、模型时间常数0.30秒，OLED标识HOLD Y DIRECT。旧PI实现/参数及保护保留，尚未实物验收，不能保证一步到位。OLED/分析工具保留，IMU_INVALID仍未解决。[测试步骤](docs/DIRECT_COMPENSATION_TEST.md)，[版本](docs/VERSIONS.md)。
-
-最新：0.08秒单参数候选未通过失配过冲检查，已单独保存v0.8.1-tau008-failed，不推荐烧录。当前工作区已恢复v0.8.0的0.30秒控制参数，仍有用户不满意的尾调，未宣称达标。[失败记录](docs/TAU008_FAILED_TEST.md)。
-
-当前进度、最新固件验证状态见[当前进度与下次继续](docs/当前进度与下次继续.md)。当前已恢复题目要求的完整PID与0～180°目标/输出范围，取消开启位置±15°诊断限制；[操作与实物测试](docs/HOLD_EXAM_TEST.md)。IMU安装映射为机构(X,Y,Z)=芯片(X,Z,-Y)，控制机构Pitch；新固件下载和实物反馈方向、精度、扰动恢复验证待完成。
+当前试验版v0.12.0-gyro-rate-response-test，OLED为HOLD Y RATE：P0.7、Ki8、D系数0.005，直接使用校准后的传感器Z轴角速度，速度贡献±0.5°，静止小噪声抑制。六项主机检查通过，未实物验收；100ms陀螺仪接续和保护保留。连续跟踪模型改善约17～22%，原wide延迟模型仍不合格，不能保证实物实时跟随。上一版v0.11.1及慢速验收版v0.10.1独立保存。 [测试步骤](docs/GYRO_RATE_RESPONSE_TEST.md)。
 
 单一 STM32F103C8T6 标准外设库（SPL）工程，入口为 `Application/main.c`，Keil 工程为 `Project/eXin.uvprojx`。实现五个页面、RTC 时间与三个闹钟、编码器、MPU6050、舵机手动/0～180°连杆姿态定角、电脑与蓝牙串口和空闲电源管理。
 

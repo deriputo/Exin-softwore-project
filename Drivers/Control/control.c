@@ -32,6 +32,9 @@ static uint8_t SampleValid(const Control *control, const ControlSample *sample)
         return 0;
     }
     measured = Selected(control, sample);
+    if (control->config.mode == CONTROL_MODE_PID && control->config.use_rate_sample &&
+        (!sample->angular_rate_valid || !NumberValid(sample->angular_rate_dps) ||
+         Abs(sample->angular_rate_dps) > 2000.0f)) return 0;
     return (uint8_t)(NumberValid(measured) && Abs(measured) <= 360.0f);
 }
 
@@ -61,6 +64,11 @@ void Control_DefaultConfig(ControlConfig *config)
     config->actuator_time_constant_seconds = 0.30f;
     config->direct_rate_gain_seconds = 0.0f;
     config->direct_rate_limit_deg = 0.0f;
+    config->use_rate_sample = 0;
+    config->rate_filter_seconds = 0.08f;
+    config->rate_term_limit_deg = 0.0f;
+    config->rate_quiet_dps = 0.0f;
+    config->rate_away_only = 0;
 }
 
 static uint8_t ConfigValid(const ControlConfig *config)
@@ -100,7 +108,14 @@ static uint8_t ConfigValid(const ControlConfig *config)
         config->direct_rate_gain_seconds <= 1.0f &&
         NumberValid(config->direct_rate_limit_deg) && config->direct_rate_limit_deg >= 0.0f &&
         config->direct_rate_limit_deg <= 30.0f &&
-        (config->direct_rate_gain_seconds == 0.0f || config->direct_rate_limit_deg > 0.0f));
+        (config->direct_rate_gain_seconds == 0.0f || config->direct_rate_limit_deg > 0.0f) &&
+        config->use_rate_sample <= 1u &&
+        NumberValid(config->rate_filter_seconds) && config->rate_filter_seconds >= 0 &&
+        config->rate_filter_seconds <= 1 &&
+        NumberValid(config->rate_term_limit_deg) && config->rate_term_limit_deg >= 0 &&
+        config->rate_term_limit_deg <= 30 &&
+        NumberValid(config->rate_quiet_dps) && config->rate_quiet_dps >= 0 &&
+        config->rate_quiet_dps <= 20 && config->rate_away_only <= 1u);
 }
 
 void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms)
@@ -197,7 +212,7 @@ ControlResult Control_SetTarget(Control *control, float target_deg)
 uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t now_ms)
 {
     float dt, measured, error, candidate_i, raw_output, output, limit;
-    float base_output, integral_step, requested_output;
+    float base_output, integral_step, requested_output, instant_rate;
     float output_low, output_high, integral_gain;
     uint32_t elapsed;
     if (!control) { return 1500u; }
@@ -304,10 +319,20 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
     if (Abs(error) <= control->config.deadband_deg) { error = 0.0f; }
     control->state.p_term = control->config.kp * error;
     /* Derivative on measurement avoids a kick when target changes. */
-    control->filtered_rate_dps += dt / (0.08f + dt) *
-        ((control->have_previous ? (measured - control->previous_measured) / dt : 0.0f) -
-         control->filtered_rate_dps);
+    instant_rate = control->config.use_rate_sample ? sample->angular_rate_dps :
+        (control->have_previous ? (measured - control->previous_measured) / dt : 0.0f);
+    control->filtered_rate_dps += dt / (control->config.rate_filter_seconds + dt) *
+        (instant_rate - control->filtered_rate_dps);
     control->state.d_term = -control->config.kd * control->filtered_rate_dps;
+    if (control->config.rate_term_limit_deg > 0)
+        control->state.d_term = Clamp(control->state.d_term,
+            -control->config.rate_term_limit_deg, control->config.rate_term_limit_deg);
+    if (control->config.use_rate_sample && Abs(control->state.error_deg) <= control->config.deadband_deg &&
+        Abs(instant_rate) <= control->config.rate_quiet_dps) control->state.d_term = 0;
+    if (control->config.use_rate_sample && control->config.rate_away_only &&
+        (Abs(instant_rate) <= control->config.rate_quiet_dps ||
+         (Abs(control->state.error_deg) > control->config.deadband_deg &&
+          control->state.error_deg * instant_rate >= 0))) control->state.d_term = 0;
     integral_gain = control->config.ki;
     if (control->config.integral_error_scale_deg > 0.0f) {
         float ratio = error / control->config.integral_error_scale_deg;

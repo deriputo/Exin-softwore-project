@@ -34,6 +34,7 @@ static uint8_t idle, pressed, blocked_tx;
 static uint16_t encoder, pulse;
 static int32_t delta;
 static float pose;
+static float imu_gz;
 static bool bus_busy, display_power, imu_failed;
 static bool imu_uncalibrated;
 static bool imu_invalid_data;
@@ -134,7 +135,7 @@ bool IMU_GetSample(IMUSample *sample)
     sample->calibrated = !imu_failed && !imu_uncalibrated;
     sample->timestamp_ms = at - imu_age;
     sample->roll_deg = 25.0f; sample->pitch_deg = pose; /* Different axes catch a wrong selection. */
-    sample->gyro_x_dps = 1.2f; sample->gyro_y_dps = -3.4f; sample->gyro_z_dps = 0.5f;
+    sample->gyro_x_dps = 1.2f; sample->gyro_y_dps = -3.4f; sample->gyro_z_dps = imu_gz;
     sample->accel_x_g = imu_ax; sample->accel_y_g = imu_ay; sample->accel_z_g = imu_az;
     sample->accel_trusted = !imu_gyro_only && !imu_invalid_data;
     sample->gyro_only = imu_gyro_only && sample->valid;
@@ -229,6 +230,7 @@ static void Reset(void)
 {
     at = 0; display_ready_at = 100u; encoder = 0; delta = 0; pose = 0; pressed = blocked_tx = 0;
     imu_failed = false;
+    imu_gz = 0.5f;
     imu_uncalibrated = false; imu_age = 0;
     imu_gravity_age = 0; imu_gyro_only = imu_gyro_clipped = false;
     imu_invalid_data = false; imu_ax = 0; imu_ay = -1; imu_az = 0;
@@ -505,17 +507,25 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, "HOLD Y PIDR3"));
+        assert(strstr(screen, APP_RATE_PID_TEST ? "HOLD Y RATE" : "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
-        assert(pulse > first + 50u); /* The application really applies Ki=6. */
+        assert(pulse > first + 50u); /* Active integral profile is applied. */
         Feed("SERVO HOLD ?\n"); Until(at + 20u);
         assert(strstr(tx, "HOLD=ON FAULT=OFF"));
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
         pose = -50; Until(at + 200u); first = pulse;
         Until(at + 400u);
         assert(pulse < first - 100u); /* Large error cannot freeze I at the slew threshold. */
+    }
+    if (APP_RATE_PID_TEST) {
+        Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
+        imu_gz = 100; Until(at + 20u);
+        assert(pulse == 1506u); /* Positive sensor Z = mechanism Pitch rate; P/I remain zero. */
+        imu_gz = -100; Until(at + 20u); assert(pulse == 1494u);
+        imu_gz = 0.5f; Until(at + 20u); assert(pulse == 1500u);
+        pose = 2; Until(at + 200u); assert(pulse >= 1549u && pulse <= 1553u);
     }
     Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
     imu_gyro_only = true; imu_gravity_age = 50;

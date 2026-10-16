@@ -1,24 +1,6 @@
 # 可选 Python 上位机
 
-当前活动源码：v0.11.0-imu-gyro-bridge-test，OLED为HOLD Y PIDR3。用户授权加速度暂时不可信时最长100ms陀螺仪接续，超时及真实通信/采样故障仍保护。RAW追加MODE/REFAGE/BRIDGE；五项主机检查通过，未实物验收。控制参数与积分修复不变；慢速验收标签v0.10.1完整保留。 [本版步骤](../docs/IMU_GYRO_BRIDGE_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码为v0.10.2-pidr-slew-fix-test，OLED显示HOLD Y PIDR2。只修复PID在限速时整轮拒绝积分导致的大误差冻结，P0.7/Ki6/Kd0.005与保护不变。四项主机检查通过，实物待验收；wide模型仍不合格，不能视为全部高速问题解决。用户慢速验收版独立保存在v0.10.1-pidr-slow-accepted及ZIP。 [本轮说明](../docs/PIDR_SLEW_FIX_TEST.md)。
-
-以下为历史记录。
-
-当前活动源码：**v0.10.0-pidr-small-angle-test**，OLED显示HOLD Y PIDR。用户已明确批准独立小角度实物试验。使用固定偏置PID，P0.7/Ki6/Kd0.005；不是小积分方案，也不是DIRECT。fast假设288组最坏过冲1.127°，但原wide范围最坏19.415°未通过；当前仅允许先做约5°测试，实物仍以2°为验收上限，尚未实物验收。由用户Keil编译烧录。[本轮步骤](../docs/PIDR_SMALL_ANGLE_TEST.md)。
-
-以下为历史记录。
-
-当前待测为 **v0.9.1-tracking-2deg-test**：用户批准2°短暂过冲上限；位置系数0.30不变，估计时间常数0.10秒、速度贡献限幅6°。288组模型最坏过冲1.88°，12组连续跟踪模型均改善，但仍未达到紧贴目标。Keil编译烧录及实物验收由用户执行。详见docs/DIRECT_TRACKING_TEST.md。
-
-以下为历史版本说明。
-
-当前DIRECT+试验：TRACE P为位置项，I=0，D为受限速度反馈（±3°，到位死区内为0）。CSV格式不变，servo仍为指令值。以下I/D均为0的描述仅适用于v0.8.0。测试见../docs/DIRECT_RATE_TEST.md。
-
-DIRECT试验模式保持CSV字段兼容。此模式P列为候选姿态误差位置补偿（非原PI的Kp项），I/D为0；target/measured/error/servo等含义不变。没有实际舵机轴角反馈，servo仍是指令。算法判别请看板端HOLD Y DIRECT标识，详见docs/DIRECT_COMPENSATION_TEST.md。
+当前试验版v0.12.0-gyro-rate-response-test，OLED为HOLD Y RATE：P0.7、Ki8、D系数0.005，直接使用校准后的传感器Z轴角速度，速度贡献±0.5°，静止小噪声抑制。六项主机检查通过，未实物验收；100ms陀螺仪接续和保护保留。连续跟踪模型改善约17～22%，原wide延迟模型仍不合格，不能保证实物实时跟随。上一版v0.11.1及慢速验收版v0.10.1独立保存。 [测试步骤](../docs/GYRO_RATE_RESPONSE_TEST.md)。TRACE格式不变，RATE下D为受限角速度贡献。screen_gyro_rate.py为主机模型筛选工具，不访问串口或硬件。
 
 新增离线分析入口`analyze_trace.py`：读取本工具记录的CSV并导出HTML曲线/JSON指标，不连接串口、不改变固件。[用法和验收](../docs/TRACE_ANALYSIS_TEST.md)。
 
