@@ -1,11 +1,12 @@
-"""Optional STM32 serial monitor. No port is opened or command sent automatically.
+"""Optional STM32 USB/BLE monitor. No device connects or command sends automatically.
 
-Python 3.9+, Tkinter (usually bundled with Python), pyserial for live connection.
+Python 3.9+, Tkinter, pyserial for USB; Bleak for Bluetooth LE.
 Parsing/building helpers intentionally work without Tkinter or pyserial installed.
 """
 from __future__ import annotations
 
 import csv
+import asyncio
 import math
 import queue
 import threading
@@ -16,6 +17,32 @@ from typing import Optional
 
 TRACE_COLUMNS = ("ms", "target", "measured", "error", "P", "I", "D", "servo", "saturated", "fault")
 TRACE_HEADER = "H," + ",".join(TRACE_COLUMNS)
+BLE_SERVICE = "0000ffe0-0000-1000-8000-00805f9b34fb"
+BLE_CHARACTERISTIC = "0000ffe1-0000-1000-8000-00805f9b34fb"
+
+
+class LineReceiver:
+    """Reassemble UART lines across arbitrary serial reads / BLE notifications."""
+
+    def __init__(self, emit):
+        self.emit = emit
+        self.pending = bytearray()
+        self.invalid = False
+
+    def feed(self, chunk):
+        for byte in chunk:
+            if byte in (10, 13):
+                if self.invalid:
+                    self.emit("error", "超长设备响应已丢弃")
+                elif self.pending:
+                    timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
+                    self.emit("line", (timestamp, self.pending.decode("ascii", errors="replace")))
+                self.pending.clear()
+                self.invalid = False
+            elif len(self.pending) < 4096 and not self.invalid:
+                self.pending.append(byte)
+            else:
+                self.invalid = True
 
 
 @dataclass(frozen=True)
@@ -108,8 +135,7 @@ class SerialWorker(threading.Thread):
 
     def run(self):
         connection = None
-        pending = bytearray()
-        invalid_line = False
+        receiver = LineReceiver(self.emit)
         try:
             import serial
             connection = serial.Serial(self.port, 115200, timeout=0.05, write_timeout=0.5)
@@ -127,19 +153,7 @@ class SerialWorker(threading.Thread):
                         raise OSError("串口未完整发送命令，请重新连接后核对设备状态")
                     self.emit("sent", command)
                 chunk = connection.read(min(max(connection.in_waiting, 1), 2048))
-                for byte in chunk:
-                    if byte in (10, 13):
-                        if invalid_line:
-                            self.emit("error", "超长设备响应已丢弃")
-                        elif pending:
-                            timestamp = datetime.now().astimezone().isoformat(timespec="milliseconds")
-                            self.emit("line", (timestamp, pending.decode("ascii", errors="replace")))
-                        pending.clear()
-                        invalid_line = False
-                    elif len(pending) < 4096 and not invalid_line:
-                        pending.append(byte)
-                    else:
-                        invalid_line = True
+                receiver.feed(chunk)
                 if self.dropped_messages:
                     try:
                         self.messages.put_nowait(("dropped", self.dropped_messages))
@@ -157,6 +171,68 @@ class SerialWorker(threading.Thread):
             self.emit("status", "disconnected")
 
 
+class BleWorker(SerialWorker):
+    """Own the BLE event loop in a background MTA thread, away from Tk."""
+
+    def __init__(self, device, messages, service=BLE_SERVICE,
+                 rx=BLE_CHARACTERISTIC, tx=BLE_CHARACTERISTIC):
+        super().__init__(device.address, messages)
+        self.device = device
+        self.service_uuid, self.rx_uuid, self.tx_uuid = service, rx, tx
+        self.name = "STM32BLE"
+
+    async def session(self, client_factory):
+        receiver = LineReceiver(self.emit)
+        async with client_factory(self.device, timeout=15.0) as client:
+            if self.stop_requested.is_set():
+                return
+            service = client.services.get_service(self.service_uuid)
+            if service is None:
+                raise ValueError("未找到 BLE 服务 " + self.service_uuid + "，请核对 UUID")
+            rx = service.get_characteristic(self.rx_uuid)
+            tx = service.get_characteristic(self.tx_uuid)
+            if rx is None or not set(rx.properties).intersection(("notify", "indicate")):
+                raise ValueError("接收 UUID 不存在或不支持通知")
+            if tx is None or not set(tx.properties).intersection(("write", "write-without-response")):
+                raise ValueError("发送 UUID 不存在或不支持写入")
+            # Prefer acknowledged writes if offered; explicitly select the operation.
+            response = "write" in tx.properties
+            await client.start_notify(rx, lambda sender, data: receiver.feed(data))
+            self.emit("status", "connected")
+            while not self.stop_requested.is_set():
+                if not client.is_connected:
+                    raise OSError("蓝牙连接已断开，请重新扫描连接")
+                try:
+                    command = self.commands.get_nowait()
+                except queue.Empty:
+                    await asyncio.sleep(0.02)
+                    continue
+                payload = (command + "\r\n").encode("ascii", errors="strict")
+                # Legacy HC-04 MTU and 9600 baud UART: conservative 20-byte chunks.
+                for offset in range(0, len(payload), 20):
+                    if self.stop_requested.is_set():
+                        return
+                    await asyncio.wait_for(client.write_gatt_char(
+                        tx, payload[offset:offset + 20], response=response), timeout=3.0)
+                    await asyncio.sleep(0.03)
+                self.emit("sent", command)
+                if self.dropped_messages:
+                    count = self.dropped_messages
+                    self.dropped_messages = 0
+                    self.emit("dropped", count)
+
+    def run(self):
+        try:
+            from bleak import BleakClient
+            asyncio.run(self.session(BleakClient))
+        except ImportError:
+            self.emit("error", "缺少 bleak，请按蓝牙使用说明安装 tools/requirements.txt")
+        except Exception as error:
+            self.emit("error", "蓝牙：" + str(error))
+        finally:
+            self.emit("status", "disconnected")
+
+
 class MonitorApp:
     def __init__(self, root):
         import tkinter as tk
@@ -164,7 +240,7 @@ class MonitorApp:
         self.tk, self.ttk = tk, ttk
         self.filedialog, self.messagebox = filedialog, messagebox
         self.root = root
-        self.root.title("e芯 STM32 上位机 · USART1 / 115200")
+        self.root.title("e芯 STM32 上位机 · USB串口 / HC-04 BLE")
         self.root.geometry("1120x850")
         self.root.minsize(900, 700)
         self.messages = queue.Queue(maxsize=1024)
@@ -176,6 +252,13 @@ class MonitorApp:
         self.last_ms = None
         self.chart_time = 0.0
         self.port = tk.StringVar()
+        self.transport = tk.StringVar(value="USB串口")
+        self.ble_service = tk.StringVar(value=BLE_SERVICE)
+        self.ble_rx = tk.StringVar(value=BLE_CHARACTERISTIC)
+        self.ble_tx = tk.StringVar(value=BLE_CHARACTERISTIC)
+        self.ble_devices = {}
+        self.scanning = False
+        self.connection_label = ""
         self.status = tk.StringVar(value="未连接 · 不会自动发送控制命令")
         self.latest = tk.StringVar(value="等待 TRACE 数据")
         self.command = tk.StringVar(value="HELP")
@@ -192,15 +275,30 @@ class MonitorApp:
         container.pack(fill="both", expand=True)
         toolbar = ttk.Frame(container)
         toolbar.pack(fill="x", pady=(0, 10))
-        ttk.Label(toolbar, text="串口").pack(side="left")
-        self.port_combo = ttk.Combobox(toolbar, textvariable=self.port, width=16, state="readonly")
+        self.mode_combo = ttk.Combobox(toolbar, textvariable=self.transport,
+                                      values=("USB串口", "蓝牙BLE"), width=10, state="readonly")
+        self.mode_combo.pack(side="left")
+        self.mode_combo.bind("<<ComboboxSelected>>", self._change_transport)
+        self.port_combo = ttk.Combobox(toolbar, textvariable=self.port, width=30, state="readonly")
         self.port_combo.pack(side="left", padx=6)
-        ttk.Button(toolbar, text="刷新", command=self._refresh_ports).pack(side="left")
-        ttk.Label(toolbar, text="115200 · 8N1").pack(side="left", padx=12)
+        self.refresh_button = ttk.Button(toolbar, text="刷新 / 扫描", command=self._refresh_ports)
+        self.refresh_button.pack(side="left")
         self.connect_button = ttk.Button(toolbar, text="连接", command=self._connect)
         self.connect_button.pack(side="left")
         ttk.Button(toolbar, text="断开", command=self._disconnect).pack(side="left", padx=6)
         ttk.Label(toolbar, textvariable=self.status).pack(side="left", padx=12)
+
+        self.ble_box = ttk.LabelFrame(container, text="BLE配置：默认HC-04；先断开手机小程序，开启电脑蓝牙", padding=4)
+        self.uuid_entries = []
+        for label, variable in (("服务", self.ble_service), ("接收", self.ble_rx), ("发送", self.ble_tx)):
+            row = ttk.Frame(self.ble_box)
+            row.pack(fill="x")
+            ttk.Label(row, text=label, width=6).pack(side="left")
+            entry = ttk.Entry(row, textvariable=variable, width=44)
+            entry.pack(side="left")
+            self.uuid_entries.append(entry)
+        # Inserted above controls only while BLE is selected.
+        self.toolbar = toolbar
 
         controls = ttk.LabelFrame(container, text="设备控制（点击才发送）", padding=8)
         controls.pack(fill="x")
@@ -273,26 +371,72 @@ class MonitorApp:
         return fields
 
     def _refresh_ports(self):
+        if self.scanning or (self.worker and self.worker.is_alive()):
+            return
+        if self.transport.get() == "蓝牙BLE":
+            self.scanning = True
+            self._lock_connection_controls(True)
+            self.status.set("正在扫描蓝牙（约5秒）…")
+            def scan():
+                try:
+                    from bleak import BleakScanner
+                    devices = asyncio.run(BleakScanner.discover(timeout=5.0))
+                    self.messages.put(("scan", (devices, None)))
+                except Exception as error:
+                    self.messages.put(("scan", ([], str(error))))
+            threading.Thread(target=scan, daemon=True, name="BLEScan").start()
+            return
         try:
             from serial.tools import list_ports
             ports = sorted(port.device for port in list_ports.comports())
         except ImportError:
-            self.status.set("未安装 pyserial：python -m pip install -r Tools/requirements.txt")
+            self.status.set("未安装 pyserial：python -m pip install -r tools/requirements.txt")
             ports = []
         self.port_combo.configure(values=ports)
         if self.port.get() not in ports:
             self.port.set("")  # User explicitly selects a port; never guess a device.
 
+    def _lock_connection_controls(self, locked):
+        self.mode_combo.configure(state="disabled" if locked else "readonly")
+        self.port_combo.configure(state="disabled" if locked else "readonly")
+        self.refresh_button.configure(state="disabled" if locked else "normal")
+        self.connect_button.configure(state="disabled" if locked else "normal")
+        for entry in self.uuid_entries:
+            entry.configure(state="disabled" if locked else "normal")
+
+    def _change_transport(self, event=None):
+        self.port.set("")
+        self.port_combo.configure(values=())
+        if self.transport.get() == "蓝牙BLE":
+            self.ble_box.pack(fill="x", after=self.toolbar, pady=(0, 8))
+            self.status.set("BLE：点击扫描并选择HC-04；不是COM口")
+        else:
+            self.ble_box.pack_forget()
+            self.status.set("USB串口：115200 · 8N1")
+            self._refresh_ports()
+
     def _connect(self):
-        if self.worker and self.worker.is_alive():
+        if self.scanning or (self.worker and self.worker.is_alive()):
             return
         port = self.port.get()
         if not port:
-            self.messagebox.showinfo("选择串口", "请先选择与开发板连接的串口")
+            self.messagebox.showinfo("选择设备", "请先刷新/扫描并选择设备")
             return
+        if self.transport.get() == "蓝牙BLE":
+            from uuid import UUID
+            try:
+                uuids = [str(UUID(v.get().strip())) for v in
+                         (self.ble_service, self.ble_rx, self.ble_tx)]
+                self.worker = BleWorker(self.ble_devices[port], self.messages, *uuids)
+            except (ValueError, KeyError):
+                self.messagebox.showerror("蓝牙配置", "请选择已扫描的设备，并填写完整有效的UUID")
+                return
+        else:
+            self.worker = SerialWorker(port, self.messages)
+        self.connection_label = self.transport.get() + " " + port
         self.status.set("正在连接 " + port)
-        self.connect_button.configure(state="disabled")
-        self.worker = SerialWorker(port, self.messages)
+        self._lock_connection_controls(True)
+        self._clear_plot()
         self.worker.start()
 
     def _disconnect(self):
@@ -304,7 +448,7 @@ class MonitorApp:
 
     def _send(self, command):
         if not self.connected or not self.worker:
-            self.messagebox.showinfo("未连接", "请先选择串口并连接设备")
+            self.messagebox.showinfo("未连接", "请先选择USB串口或蓝牙设备并连接")
             return
         if not command or len(command) > 95 or any(ord(c) < 32 or ord(c) > 126 for c in command):
             self.messagebox.showerror("命令无效", "命令必须为 1～95 个可打印 ASCII 字符，不含换行")
@@ -345,8 +489,19 @@ class MonitorApp:
                 break
             if kind == "status":
                 self.connected = value == "connected"
-                self.status.set("已连接 " + self.port.get() if self.connected else "未连接")
-                self.connect_button.configure(state="disabled" if self.connected else "normal")
+                self.status.set("已连接 " + self.connection_label if self.connected else "未连接")
+                self._lock_connection_controls(self.connected)
+            elif kind == "scan":
+                devices, error = value
+                self.scanning = False
+                self.ble_devices = {f"{d.name or '未命名'} [{d.address}]": d for d in devices}
+                self.port.set("")
+                self.port_combo.configure(values=sorted(self.ble_devices))
+                self._lock_connection_controls(False)
+                self.status.set(f"扫描到 {len(devices)} 个设备，请选择HC-04")
+                if error:
+                    self.status.set("扫描失败，详见下方；请确认已安装bleak并开启电脑蓝牙")
+                    self._console_line("! 蓝牙扫描：" + error)
             elif kind == "sent":
                 self._console_line("> " + value)
             elif kind == "error":
