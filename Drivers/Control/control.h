@@ -58,6 +58,8 @@ typedef struct {
     float rate_term_limit_deg; /* 0: legacy unlimited D before final output limits. */
     float rate_quiet_dps;
     uint8_t rate_away_only; /* Assist motion away from target; no return braking. */
+    float motion_integral_ki; /* 0 disables; upper Ki while error is growing. */
+    float motion_growth_scale; /* Positive scale in deg^2/s when boost enabled. */
 } ControlConfig;
 
 typedef struct {

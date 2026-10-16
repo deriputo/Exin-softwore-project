@@ -69,6 +69,8 @@ void Control_DefaultConfig(ControlConfig *config)
     config->rate_term_limit_deg = 0.0f;
     config->rate_quiet_dps = 0.0f;
     config->rate_away_only = 0;
+    config->motion_integral_ki = 0.0f;
+    config->motion_growth_scale = 60.0f;
 }
 
 static uint8_t ConfigValid(const ControlConfig *config)
@@ -115,7 +117,12 @@ static uint8_t ConfigValid(const ControlConfig *config)
         NumberValid(config->rate_term_limit_deg) && config->rate_term_limit_deg >= 0 &&
         config->rate_term_limit_deg <= 30 &&
         NumberValid(config->rate_quiet_dps) && config->rate_quiet_dps >= 0 &&
-        config->rate_quiet_dps <= 20 && config->rate_away_only <= 1u);
+        config->rate_quiet_dps <= 20 && config->rate_away_only <= 1u &&
+        NumberValid(config->motion_integral_ki) && config->motion_integral_ki >= 0 &&
+        config->motion_integral_ki <= 100 &&
+        NumberValid(config->motion_growth_scale) && config->motion_growth_scale > 0 &&
+        (config->motion_integral_ki == 0 ||
+         (config->use_rate_sample && config->motion_integral_ki >= config->ki)));
 }
 
 void Control_Init(Control *control, const ControlConfig *config, uint32_t now_ms)
@@ -339,6 +346,16 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
         float weight = ratio * ratio / (1.0f + ratio * ratio);
         integral_gain = control->config.integral_min_ki +
             (control->config.ki - control->config.integral_min_ki) * weight;
+    }
+    if (control->config.use_rate_sample && control->config.motion_integral_ki > integral_gain &&
+        Abs(instant_rate) > control->config.rate_quiet_dps) {
+        float growth = -error * instant_rate;
+        if (growth > 0.0f) {
+            /* Increase only the new increment, never rescale stored integral.
+               As the mechanism returns, use the base gain for braking margin. */
+            integral_gain += (control->config.motion_integral_ki - integral_gain) *
+                growth / (growth + control->config.motion_growth_scale);
+        }
     }
     candidate_i = Clamp(control->state.i_term + integral_gain * error * dt,
         -control->config.integral_limit_deg, control->config.integral_limit_deg);

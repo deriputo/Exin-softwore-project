@@ -88,5 +88,23 @@ int main(void){
  s.timestamp_ms=20;s.angular_rate_dps=100;(void)Control_Update(&c,&s,20);assert(c.state.d_term==0);
  s.timestamp_ms=40;s.angular_rate_dps=-100;(void)Control_Update(&c,&s,40);assert(c.state.d_term>0);
  puts("PASS: RATE input, onset in deadband, bounded response, quiet noise, target kick, missing/NaN rate, latch and optional away gate");
+ /* Experimental scheduling stays disabled in the application. Verify its
+    increment/sign behavior independently before preserving the experiment. */
+ cfg=Active(1);cfg.motion_integral_ki=10;cfg.motion_growth_scale=10;
+ Control_Init(&c,&cfg,0);assert(c.config.motion_integral_ki==10);
+ s.pitch_deg=90;s.timestamp_ms=0;s.angular_rate_dps=0;s.angular_rate_valid=1;
+ assert(Control_StartHold(&c,&s,0)==CONTROL_OK);
+ s.pitch_deg=91;s.angular_rate_dps=10;s.timestamp_ms=20;
+ (void)Control_Update(&c,&s,20);
+ assert(Abs(c.state.i_term+.18f)<.0001f); /* Ki9, moving away; old I not rescaled. */
+ s.angular_rate_dps=-10;s.timestamp_ms=40;(void)Control_Update(&c,&s,40);
+ assert(Abs(c.state.i_term+.34f)<.0001f); /* Return uses base Ki8. */
+ s.pitch_deg=90.1f;s.angular_rate_dps=10;s.timestamp_ms=60;(void)Control_Update(&c,&s,60);
+ assert(Abs(c.state.i_term+.34f)<.0001f); /* Deadband cannot accumulate boost. */
+ cfg.motion_integral_ki=7;Control_Init(&c,&cfg,0);
+ assert(c.config.motion_integral_ki==0); /* Reject boost below base gain. */
+ cfg.motion_integral_ki=10;cfg.motion_growth_scale=NAN;Control_Init(&c,&cfg,0);
+ assert(c.config.motion_integral_ki==0);
+ puts("PASS: disabled experimental motion integral, growing/returning/deadband and config guards");
  return 0;
 }
