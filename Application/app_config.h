@@ -10,7 +10,12 @@
 #define APP_HOLD_AXIS CONTROL_AXIS_PITCH
 /* Measured mount: output90->100 makes calibrated Pitch0->-10deg. */
 #define APP_HOLD_DIRECTION -1
-#define APP_CONTROL_MODE CONTROL_MODE_DIRECT
+#define APP_CONTROL_MODE CONTROL_MODE_PID
+/* Independent small-disturbance candidate; legacy PI/DIRECT settings retained. */
+#define APP_POSITION_PID_TEST 1
+#define APP_POSITION_PID_KP 0.7f
+#define APP_POSITION_PID_KI 6.0f
+#define APP_POSITION_PID_KD 0.005f
 #define APP_DIRECT_POSITION_GAIN 0.3f
 #define APP_ACTUATOR_TIME_CONSTANT_SECONDS 0.10f
 #define APP_DIRECT_RATE_GAIN_SECONDS 0.06f

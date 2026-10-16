@@ -455,7 +455,7 @@ int main(void)
     Reset(); Until(at + 61000u); assert(Power_IsIdle() && !display_power);
     BluetoothFeed("SERVO ?\r\n"); Until(at + 100u);
     assert(!Power_IsIdle() && display_power && strstr(bt_tx, "SERVO="));
-    if (APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI == 0.0f) {
+    if (!APP_POSITION_PID_TEST && APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI == 0.0f) {
         uint16_t expected;
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
         if (APP_HOLD_KD == 0.0f) {
@@ -475,7 +475,7 @@ int main(void)
         Until(at + 10000u);
         assert(pulse == expected); /* Application really has I disabled: no slow drift. */
     }
-    if (APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI > 0.0f && APP_HOLD_KD == 0.0f) {
+    if (!APP_POSITION_PID_TEST && APP_CONTROL_MODE == CONTROL_MODE_PID && APP_HOLD_KI > 0.0f && APP_HOLD_KD == 0.0f) {
         uint16_t first;
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
         pose = 5.0f; Until(at + 2000u); first = pulse;
@@ -493,6 +493,18 @@ int main(void)
         assert(pulse == retained); /* On-target command retained despite model lag. */
         Feed("SERVO TRACE ON\n"); Until(at + 100u);
         assert(strstr(tx, "H,ms,target,measured,error,P,I,D,servo,saturated,fault"));
+    }
+    if (APP_POSITION_PID_TEST) {
+        uint16_t first;
+        Reset(); Turn(3); Key(KEY_ID_1, 0);
+        Feed("SERVO HOLD ON\n"); Until(at + 100u);
+        assert(strstr(screen, "HOLD Y PIDR"));
+        pose = 2; Until(at + 40u); first = pulse;
+        assert(first > 1515u && first < 1535u);
+        Until(at + 500u);
+        assert(pulse > first + 50u); /* The application really applies Ki=6. */
+        Feed("SERVO HOLD ?\n"); Until(at + 20u);
+        assert(strstr(tx, "HOLD=ON FAULT=OFF"));
     }
     puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;

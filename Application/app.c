@@ -498,7 +498,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_POSITION_PID_TEST ? "HOLD Y PIDR" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);
@@ -572,6 +572,13 @@ void App_Init(uint32_t at)
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.hold_output_span_deg = APP_HOLD_OUTPUT_SPAN_DEG;
     config.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
+#if APP_POSITION_PID_TEST
+    config.kp = APP_POSITION_PID_KP;
+    config.ki = APP_POSITION_PID_KI;
+    config.kd = APP_POSITION_PID_KD;
+    config.integral_min_ki = 0.0f;
+    config.integral_error_scale_deg = 0.0f;
+#endif
     Control_Init(&control, &config, at);
     Protocol_Init(&protocol, Command, WriteProtocol, (void *)&wired_channel);
     Protocol_Init(&bluetooth_protocol, Command, WriteProtocol, (void *)&bluetooth_channel);

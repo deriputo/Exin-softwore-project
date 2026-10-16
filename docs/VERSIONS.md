@@ -22,10 +22,13 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.8.0-direct-compensation-test` | 新增基于执行器位置估计的DIRECT模式，补偿系数0.5、时间常数0.30秒；旧PI保留 | control_direct/control/app_integration通过，288组模型检查通过，尚未实物验收 |
 | `v0.8.1-tau008-failed` | 仅把模型时间常数改0.08秒、系数0.5不变 | 应用整合通过，直接补偿失配过冲检查失败：最坏21.70°，不推荐烧录 |
 | `v0.8.2-tau030-restored` | 活动固件恢复v0.8.0的0.30秒/系数0.5，附失败记录 | control_direct及app_integration重新通过；没有实现新的提速 |
+| `v0.10.0-pidr-small-angle-test` | 用户批准独立小角度PIDR：P0.7/Ki6/Kd0.005，固定偏置，较快恒定积分 | fast假设288组1.127°通过；原wide范围19.415°不通过，尚未实物验收，仅先测约5° |
 | `v0.9.1-tracking-2deg-test` | 2°过冲预算下跟进时间0.10秒、速度反馈贡献上限6°，位置系数0.30不变 | 三项主机检查通过；连续跟踪略改善，待用户实物验收 |
 | `v0.9.0-direct-rate-test` | DIRECT增加50ms滤波的受限速度反馈，贡献±3°，死区内关闭；系数0.30/时间常数0.12秒 | 三项主机测试通过，288组失配最坏过冲1.29°；等待用户编译烧录和静止/5°验收 |
 
-当前v0.9.1-tracking-2deg-test：用户批准2°过冲，时间常数0.10秒/速度贡献上限6°/位置系数0.30。完整288组最坏过冲1.88°，12组连续跟踪误差改善；尚未实物验收，未达到紧贴目标。MCU由用户编译烧录；见[测试说明](DIRECT_TRACKING_TEST.md)。
+当前待测v0.10.0-pidr-small-angle-test，限第一轮约5°实物试验，已获用户明确批准；不能当作原wide范围通过。测试步骤见[PIDR_SMALL_ANGLE_TEST.md](PIDR_SMALL_ANGLE_TEST.md)。
+
+历史记录：当前v0.9.1-tracking-2deg-test：用户批准2°过冲，时间常数0.10秒/速度贡献上限6°/位置系数0.30。完整288组最坏过冲1.88°，12组连续跟踪误差改善；尚未实物验收，未达到紧贴目标。MCU由用户编译烧录；见[测试说明](DIRECT_TRACKING_TEST.md)。
 
 上一版：当前分支为`codex/hold-response`。当前待测v0.9.0-direct-rate-test：DIRECT+受限速度反馈，参数0.30/0.12秒/0.06秒/±3°。288组最坏过冲1.29°，尚未实物验收，MCU编译烧录由用户执行。IMU_INVALID仍未解决。测试见[DIRECT_RATE_TEST.md](DIRECT_RATE_TEST.md)。
 
