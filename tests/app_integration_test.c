@@ -43,7 +43,9 @@ static uint32_t imu_age;
 static uint32_t imu_gravity_age;
 static bool imu_gyro_only, imu_gyro_clipped;
 static uint8_t frame[1024];
-static char screen[1024], rx[4096], tx[131072];
+/* Host log of all bytes already transmitted, not the MCU TX ring. Long idle
+   tests retain minutes of 50 Hz TRACE history without a GUI clearing it. */
+static char screen[1024], rx[4096], tx[1048576];
 static size_t rx_read, rx_write, tx_length;
 static char bt_rx[4096], bt_tx[131072];
 static size_t bt_rx_read, bt_rx_write, bt_tx_length;
@@ -457,6 +459,8 @@ int main(void)
     assert(strstr(tx, "SERVO TRACE=OFF") && strstr(bt_tx, "OK SERVO TRACE=ON"));
     Feed("SERVO TRACE ON\r\n"); Until(at + 1000u);
     assert(TraceCount() >= 15u && strstr(bt_tx, "\r\nH,"));
+    traces = TraceCount(); Until(at + 1000u);
+    assert(TraceCount() == traces + 50u); /* Actual application emits 50 wired rows/s. */
     BluetoothFeed("SERVO TRACE OFF\r\n"); Until(at + 100u); traces = (unsigned int)bt_tx_length;
     Until(at + 300u); assert(bt_tx_length == traces); /* Bluetooth OFF does not stop wired TRACE. */
     assert(TraceCount() >= 20u);

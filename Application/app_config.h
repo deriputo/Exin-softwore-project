@@ -4,7 +4,9 @@
 #define APP_IDLE_TIMEOUT_MS 60000u
 #define APP_DISPLAY_PERIOD_MS 100u
 #define APP_BOOT_ANIMATION_MS 1200u
-#define APP_TRACE_PERIOD_MS 50u
+/* Diagnostic: 50 Hz wired TRACE resolves the fast manual step more closely.
+   Control period, servo PWM frequency and Bluetooth TRACE are unchanged. */
+#define APP_TRACE_PERIOD_MS 20u
 #define APP_BLUETOOTH_TRACE_PERIOD_MS 200u
 #define APP_MENU_DIRECT_SELECT 1
 #define APP_HOLD_AXIS CONTROL_AXIS_PITCH
