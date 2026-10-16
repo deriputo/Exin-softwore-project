@@ -1,5 +1,7 @@
 # 可选 Python 上位机
 
+新增离线分析入口`analyze_trace.py`：读取本工具记录的CSV并导出HTML曲线/JSON指标，不连接串口、不改变固件。[用法和验收](../docs/TRACE_ANALYSIS_TEST.md)。
+
 此工具用于电脑串口控制与姿态闭环演示，属于软件扩展，不是 STM32 固件依赖。不会自动选择、连接串口或发送舵机/TRACE/HOLD 命令。
 
 安装 Python 3.9 或更新版本（带 Tkinter），在工程根目录执行：
