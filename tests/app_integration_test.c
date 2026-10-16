@@ -474,6 +474,13 @@ int main(void)
         Until(at + 10000u);
         assert(pulse == expected); /* Application really has I disabled: no slow drift. */
     }
-    puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; zero-I profile retains P without integral drift");
+    if (APP_HOLD_KI > 0.0f && APP_HOLD_KD == 0.0f) {
+        uint16_t first;
+        Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+        pose = 5.0f; Until(at + 2000u); first = pulse;
+        Until(at + 10000u);
+        assert(pulse > first + 20u && pulse < 2500u); /* Restored I acts on persistent error. */
+    }
+    puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;
 }

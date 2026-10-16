@@ -16,10 +16,10 @@
 #define APP_HOLD_DIAGNOSTIC 0
 #define APP_HOLD_NORMAL_KP 1.0f
 /* Smooth variable integration: Ki_eff = Ki / (1 + (error / scale)^2). */
-/* Static oscillation diagnosis only: disable integral, retain P/D. */
-#define APP_HOLD_NORMAL_KI 0.0f
+/* Restore modest variable integration after pure-P static acceptance. */
+#define APP_HOLD_NORMAL_KI 0.5f
 #define APP_HOLD_INTEGRAL_ERROR_SCALE_DEG 8.0f
-/* Static oscillation diagnosis: pure P, no I or D contribution. */
+/* Keep derivative disabled during integral reintroduction. */
 #define APP_HOLD_NORMAL_KD 0.0f
 #if APP_HOLD_DIAGNOSTIC
 #define APP_HOLD_KP 0.5f
