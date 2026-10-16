@@ -14,6 +14,7 @@
 #include "oled.h"
 #include "oled_gfx.h"
 #include "imu.h"
+#include "imu_config.h"
 #include "serial.h"
 #include "bluetooth.h"
 #include <assert.h>
@@ -511,7 +512,7 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, APP_RATE_PID_TEST ? "HOLD Y RATE" : "HOLD Y PIDR3"));
+        assert(strstr(screen, APP_RATE_PID_TEST ? (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE") : "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);

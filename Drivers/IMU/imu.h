@@ -13,6 +13,7 @@ typedef struct {
     bool accel_trusted;
     bool gyro_only;
     bool gyro_saturated;
+    bool settling_fast; /* Stronger selected-axis gravity correction used this frame. */
     uint32_t gravity_age_ms; /* UINT32_MAX: no accepted gravity reference yet. */
     uint32_t gyro_bridge_count; /* Accepted gyro-only frames since initialization/calibration. */
 } IMUSample;

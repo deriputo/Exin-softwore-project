@@ -37,6 +37,7 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     sample->accel_z_g = SignedWord(raw + 4) / 16384.0f;
     sample->temperature_c = SignedWord(raw + 6) / 340.0f + 36.53f;
     sample->gyro_saturated = false;
+    sample->settling_fast = false;
     for (i = 0; i < 3; ++i) {
         int16_t word = SignedWord(raw + 8 + i * 2);
         if (word >= IMU_GYRO_SATURATION_RAW || word <= -IMU_GYRO_SATURATION_RAW)
@@ -104,6 +105,22 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     { float mapped_y = g[2]; g[2] = -g[1]; g[1] = mapped_y; }
 #endif
     dt = (uint32_t)(now_ms - core->previous_ms) * 0.001f;
+    /* A quiet window is only evidence for stronger gravity correction, never
+       evidence to mark an invalid frame valid or to update calibration bias. */
+    if (IMU_SETTLE_ENABLE && core->calibrated && !core->first && frame_usable &&
+        gravity_trusted && projection >= 0.25f &&
+        (uint32_t)(now_ms - core->previous_ms) > 0u &&
+        (uint32_t)(now_ms - core->previous_ms) <= IMU_SETTLE_MAX_GAP_MS &&
+        fabsf(norm - 1.0f) <= IMU_SETTLE_NORM_TOLERANCE &&
+        fabsf(g[0]) <= IMU_SETTLE_GYRO_DPS && fabsf(g[1]) <= IMU_SETTLE_GYRO_DPS &&
+        fabsf(g[2]) <= IMU_SETTLE_GYRO_DPS) {
+        if (!core->quiet_tracking ||
+            fabsf(Wrap(accel_tilt_pitch - core->quiet_tilt_anchor)) > IMU_SETTLE_ACCEL_SPAN_DEG) {
+            core->quiet_since_ms = now_ms;
+            core->quiet_tilt_anchor = accel_tilt_pitch;
+            core->quiet_tracking = true;
+        }
+    } else core->quiet_tracking = false;
     if (!frame_usable) {
         /* Zero/corrupt-range frames and clipped gyros cannot seed prediction. */
         core->first = true;
@@ -137,8 +154,18 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
             core->roll = Wrap(core->roll + (1.0f - alpha) * Wrap(accel_roll - core->roll));
             core->pitch += (1.0f - alpha) * Wrap(accel_pitch - core->pitch);
             if (projection >= 0.04f) {
-                core->tilt_pitch = Wrap(core->tilt_pitch +
-                    (1.0f - alpha) * Wrap(accel_tilt_pitch - core->tilt_pitch));
+                float innovation = Wrap(accel_tilt_pitch - core->tilt_pitch);
+                float correction = (1.0f - alpha) * innovation;
+                if (core->quiet_tracking &&
+                    (uint32_t)(now_ms - core->quiet_since_ms) >= IMU_SETTLE_QUIET_MS &&
+                    fabsf(innovation) <= IMU_SETTLE_INNOVATION_DEG) {
+                    float maximum = IMU_SETTLE_MAX_CORRECTION_DPS * dt;
+                    correction = dt / (IMU_SETTLE_TAU_SECONDS + dt) * innovation;
+                    if (correction > maximum) correction = maximum;
+                    if (correction < -maximum) correction = -maximum;
+                    sample->settling_fast = true;
+                }
+                core->tilt_pitch = Wrap(core->tilt_pitch + correction);
             }
             core->last_gravity_ms = now_ms;
             core->have_gravity_reference = true;

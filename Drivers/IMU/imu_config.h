@@ -7,6 +7,17 @@
 #define IMU_CALIBRATION_SAMPLES 200u
 #define IMU_CALIBRATION_TIMEOUT_MS 10000u
 #define IMU_FILTER_TAU_SECONDS 0.5f
+/* Trial: faster selected-axis residual correction only after quiet gravity.
+   This does not change calibration, validity or gyro-only bridge rules. */
+#define IMU_SETTLE_ENABLE 1u
+#define IMU_SETTLE_QUIET_MS 80u
+#define IMU_SETTLE_MAX_GAP_MS 30u
+#define IMU_SETTLE_GYRO_DPS 2.0f
+#define IMU_SETTLE_NORM_TOLERANCE 0.03f
+#define IMU_SETTLE_ACCEL_SPAN_DEG 0.2f
+#define IMU_SETTLE_INNOVATION_DEG 2.0f
+#define IMU_SETTLE_TAU_SECONDS 0.10f
+#define IMU_SETTLE_MAX_CORRECTION_DPS 6.0f
 #define IMU_GYRO_BRIDGE_MS 100u
 #define IMU_GYRO_SATURATION_RAW 32700
 /* Actual rod mount: mechanism (X,Y,Z) = sensor (X,Z,-Y). */

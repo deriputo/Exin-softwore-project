@@ -88,6 +88,70 @@ static void BridgeTests(void)
     assert(!s.calibrated); Word(raw + 4, 2834); Update(&core, raw, 30, &s);
     assert(!s.valid); /* No gyro-only bridge before calibration. */
 }
+static void SettlingTests(void)
+{
+    IMUCore core; IMUSample s; uint8_t raw[14]; uint32_t now = 0;
+    unsigned int i, fast_entry = 0, legacy_entry = 0;
+    float legacy = .7f, alpha = IMU_FILTER_TAU_SECONDS / (IMU_FILTER_TAU_SECONDS + .01f);
+    Calibrate(&core, raw, &now, &s);
+    core.tilt_pitch = core.roll = .7f; /* Same small residual, gravity is already level. */
+    for (i = 1; i <= 150; ++i) {
+        legacy *= alpha;
+        Update(&core, raw, now += 10, &s);
+        assert(s.valid && s.calibrated && !s.gyro_only);
+        if (i <= 8) assert(!s.settling_fast && fabsf(s.pitch_deg - legacy) < .00001f);
+        if (i >= 9) assert(s.settling_fast);
+        if (!fast_entry && fabsf(s.pitch_deg) <= .1f) fast_entry = i * 10;
+        if (!legacy_entry && legacy <= .1f) legacy_entry = i * 10;
+        assert(fabsf(s.roll_deg - legacy) < .00001f); /* Other attitude axes unchanged. */
+    }
+    assert(fast_entry <= 300 && legacy_entry >= 900);
+    printf("Quiet 0.7deg synthetic residual to 0.1deg: old=%ums new=%ums\n", legacy_entry, fast_entry);
+
+    /* Moving, excessive norm and >2deg innovation retain the old correction. */
+    Calibrate(&core, raw, &now, &s); core.tilt_pitch = .7f; legacy = .7f;
+    Word(raw + 10, 655); /* Selected gyro 10dps: motion cannot qualify as quiet. */
+    for (i = 0; i < 30; ++i) {
+        legacy = (legacy + (655.0f / 65.5f) * .01f) * alpha;
+        Update(&core, raw, now += 10, &s);
+        assert(!s.settling_fast && !core.quiet_tracking && fabsf(s.pitch_deg - legacy) < .0001f);
+    }
+    Calibrate(&core, raw, &now, &s); core.tilt_pitch = .7f; legacy = .7f;
+    Word(raw + 4, 18022); /* ~1.1g, valid legacy gravity but not strict quiet gravity. */
+    for (i = 0; i < 30; ++i) {
+        legacy *= alpha; Update(&core, raw, now += 10, &s);
+        assert(s.valid && !core.quiet_tracking && fabsf(s.pitch_deg - legacy) < .0001f);
+    }
+    Calibrate(&core, raw, &now, &s); core.tilt_pitch = 3; legacy = 3;
+    for (i = 0; i < 10; ++i) {
+        legacy *= alpha; Update(&core, raw, now += 10, &s);
+        assert(fabsf(s.pitch_deg - legacy) < .0001f);
+    }
+    /* Qualify, then interrupt the window: gap, moving gravity, gyro-only. */
+    Calibrate(&core, raw, &now, &s);
+    for (i = 0; i < 10; ++i) Update(&core, raw, now += 10, &s);
+    assert(core.quiet_tracking);
+    Update(&core, raw, now += 40, &s); assert(!core.quiet_tracking && s.valid);
+    for (i = 0; i < 10; ++i) Update(&core, raw, now += 10, &s);
+    Word(raw, -114); /* ~0.4deg gravity angle jump restarts the 80ms window. */
+    Update(&core, raw, now += 10, &s); assert(core.quiet_since_ms == now);
+    Word(raw, 0); Word(raw + 4, 2834);
+    Update(&core, raw, now += 10, &s); assert(!s.settling_fast && !core.quiet_tracking && s.gyro_only);
+    Update(&core, raw, now += 101, &s); assert(!s.valid && !core.quiet_tracking);
+
+    Calibrate(&core, raw, &now, &s); now = 0xfffffff0u;
+    Update(&core, raw, now, &s); /* Gap reacquires gravity and clears quiet window. */
+    for (i = 0; i < 10; ++i) Update(&core, raw, now += 10, &s);
+    assert(core.quiet_tracking && (uint32_t)(now - core.quiet_since_ms) >= IMU_SETTLE_QUIET_MS);
+    /* 60sec of small raw gravity noise must remain bounded at rest. */
+    for (i = 0; i < 6000; ++i) {
+        Word(raw, (int16_t)(i % 2 ? 14 : -14));
+        Update(&core, raw, now += 10, &s);
+        assert(s.valid && fabsf(s.pitch_deg) < .06f);
+    }
+    IMUCore_StartCalibration(&core); assert(!core.quiet_tracking);
+    puts("PASS: guarded selected-axis settling, motion/norm/innovation rejection, interruptions, wrap and static noise");
+}
 int main(void)
 {
     IMUCore core;
@@ -145,6 +209,7 @@ int main(void)
     Update(&core, raw, now += 10u, &sample); assert(sample.valid && sample.gyro_only);
     Update(&core, raw, now += 101u, &sample); assert(!sample.valid);
     BridgeTests();
+    SettlingTests();
     puts("PASS: IMU calibration/fusion, bounded gyro bridge, timeout/recovery, zero/clipped/gapped frames and rollover");
     return 0;
 }
