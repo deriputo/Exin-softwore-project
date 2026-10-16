@@ -498,13 +498,17 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, "HOLD Y PIDR"));
+        assert(strstr(screen, "HOLD Y PIDR2"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
         assert(pulse > first + 50u); /* The application really applies Ki=6. */
         Feed("SERVO HOLD ?\n"); Until(at + 20u);
         assert(strstr(tx, "HOLD=ON FAULT=OFF"));
+        Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
+        pose = -50; Until(at + 200u); first = pulse;
+        Until(at + 400u);
+        assert(pulse < first - 100u); /* Large error cannot freeze I at the slew threshold. */
     }
     puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;

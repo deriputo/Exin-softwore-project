@@ -498,7 +498,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_POSITION_PID_TEST ? "HOLD Y PIDR" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_POSITION_PID_TEST ? "HOLD Y PIDR2" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);

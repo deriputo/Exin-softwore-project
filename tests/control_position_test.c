@@ -78,6 +78,43 @@ int main(void)
     }
     printf("PIDR fast hypothesis %u cases: worst overshoot=%.3fdeg entry=%lu ms\n",
         count, (double)worst, (unsigned long)slow);
+    /* Reproduce the CSV plateau: e=47.7, I=-25.7. Both physical directions
+       must use the available slew budget, reach a rail without windup, and
+       leave that rail after error reversal. */
+    for (a = 0; a < 2; ++a) {
+        float previous, rail_i;
+        cfg = Config(0); cfg.direction = a ? 1 : -1;
+        Control_Init(&c, &cfg, 0); s = Sample(90, 0);
+        assert(Control_StartHold(&c, &s, 0) == CONTROL_OK);
+        c.state.i_term = -25.7f;
+        c.state.output_angle_deg = 90 + cfg.direction * (.7f * 47.7f - 25.7f);
+        c.previous_measured = 42.3f;
+        previous = c.state.output_angle_deg;
+        s = Sample(42.3f, 20); (void)Control_Update(&c, &s, 20);
+        assert(Abs(c.state.i_term - (-25.7f + 3.6f)) < .001f);
+        assert(Abs(c.state.output_angle_deg - (previous + cfg.direction * 3.6f)) < .001f);
+        assert(c.state.saturated);
+        for (now = 40; now <= 2000; now += 20) {
+            previous = c.state.output_angle_deg;
+            s = Sample(42.3f, now); (void)Control_Update(&c, &s, now);
+            assert(Abs(c.state.output_angle_deg - previous) <= 3.601f);
+        }
+        assert(c.state.output_angle_deg == (a ? 180 : 0));
+        rail_i = c.state.i_term;
+        for (; now <= 3000; now += 20) {
+            s = Sample(42.3f, now); (void)Control_Update(&c, &s, now);
+            assert(c.state.i_term == rail_i && c.state.saturated);
+        }
+        s = Sample(137.7f, now); (void)Control_Update(&c, &s, now);
+        assert(a ? c.state.output_angle_deg < 180 : c.state.output_angle_deg > 0);
+    }
+    cfg = Config(0);
+    for (a = 0; a < 2; ++a) {
+        Result large = Run(0, a ? 50 : -50, .04f, 1.1f, 0, 0, 0);
+        assert(large.entry < 3000 && Abs(large.tail) <= 1 && large.overshoot <= 2);
+        printf("Large %.0fdeg reference: entry=%lu ms overshoot=%.3fdeg\n",
+            a ? 50.0 : -50.0, (unsigned long)large.entry, (double)large.overshoot);
+    }
     {
         Result old = Run(1, 15, .24f, 1, 0, 0, 0);
         Result next = Run(0, 15, .24f, 1, 0, 0, 0);

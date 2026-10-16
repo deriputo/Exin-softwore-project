@@ -196,7 +196,8 @@ ControlResult Control_SetTarget(Control *control, float target_deg)
 
 uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t now_ms)
 {
-    float dt, measured, error, candidate_i, raw_output, output, limit, signed_error;
+    float dt, measured, error, candidate_i, raw_output, output, limit;
+    float base_output, integral_step, requested_output;
     float output_low, output_high, integral_gain;
     uint32_t elapsed;
     if (!control) { return 1500u; }
@@ -316,23 +317,32 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
     }
     candidate_i = Clamp(control->state.i_term + integral_gain * error * dt,
         -control->config.integral_limit_deg, control->config.integral_limit_deg);
-    raw_output = control->bias_angle_deg + (float)control->config.direction *
+    requested_output = control->bias_angle_deg + (float)control->config.direction *
         (control->state.p_term + candidate_i + control->state.d_term);
-    signed_error = (float)control->config.direction * error;
     limit = control->config.slew_deg_per_second * dt;
-    /* Freeze integration whenever it would drive further into rail/slew limiting. */
-    if (!((signed_error > 0.0f && (raw_output > output_high ||
-            raw_output > control->state.output_angle_deg + limit)) ||
-          (signed_error < 0.0f && (raw_output < output_low ||
-            raw_output < control->state.output_angle_deg - limit)))) {
-        control->state.i_term = candidate_i;
+    base_output = control->bias_angle_deg + (float)control->config.direction *
+        (control->state.p_term + control->state.i_term + control->state.d_term);
+    integral_step = (float)control->config.direction * (candidate_i - control->state.i_term);
+    /* Accept only the integral increment that fits the reachable output window.
+       Rejecting the whole increment can deadlock at |Ki*error| > slew forever.
+       Existing excess P/D never forces the integrator backwards; unwinding an
+       existing saturated integral remains possible in the opposite direction. */
+    if (integral_step > 0.0f) {
+        float upper = Clamp(control->state.output_angle_deg + limit, output_low, output_high);
+        integral_step = Clamp(upper - base_output, 0.0f, integral_step);
+    } else if (integral_step < 0.0f) {
+        float lower = Clamp(control->state.output_angle_deg - limit, output_low, output_high);
+        integral_step = -Clamp(base_output - lower, 0.0f, -integral_step);
     }
+    control->state.i_term = Clamp(control->state.i_term +
+        (float)control->config.direction * integral_step,
+        -control->config.integral_limit_deg, control->config.integral_limit_deg);
     raw_output = control->bias_angle_deg + (float)control->config.direction *
         (control->state.p_term + control->state.i_term + control->state.d_term);
     output = Clamp(raw_output, output_low, output_high);
     output = Clamp(output, control->state.output_angle_deg - limit,
         control->state.output_angle_deg + limit);
-    control->state.saturated = (uint8_t)(Abs(output - raw_output) > 0.001f);
+    control->state.saturated = (uint8_t)(Abs(output - requested_output) > 0.001f);
     control->state.output_angle_deg = output;
     control->state.pulse_us = AngleToPulse(output);
     control->last_update_ms = now_ms;
