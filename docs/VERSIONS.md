@@ -14,9 +14,10 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.6.0-nonlinear-pi-test` | Kp1.6、Ki峰值2、误差尺度8° | 软件测试通过，但实物静止左右抽动，未通过验收 |
 | `v0.6.1-nonlinear-i08-test` | 保留Kp1.6，Ki峰值2降至0.8 | 用户反馈静止仍左右摆动，未通过验收 |
 | `v0.6.2-ki0-diagnostic` | Ki0、Kp1.6、Kd0.02静止对照 | 用户反馈静止仍左右摆动，尚不能确定P/D或测量波动根因 |
-| `v0.6.3-kp10-ki0-diagnostic` | 用户指定仅把Kp降到1.0，Ki0/Kd0.02保留 | control/app_integration通过，待静止20秒实物对照 |
+| `v0.6.3-kp10-ki0-diagnostic` | Kp1.0、Ki0、Kd0.02 | 用户反馈静止仍左右摆动 |
+| `v0.6.4-p-only-diagnostic` | 仅关闭D，Kp1.0/Ki0/Kd0纯比例静止对照 | control/app_integration通过，待静止及TRACE实物对照 |
 
-当前分支为`codex/hold-response`。OLED差异刷新已验收，分析工具可运行。关闭积分后仍静止摆动；用户指定进行[Kp1.0静止对照](KP10_DIAGNOSTIC_TEST.md)，保留连杆IMU闭环及保护。每版单独提交、打标签并备份。MCU编译和烧录由用户执行，实物验收前不称稳定版。
+当前分支为`codex/hold-response`。OLED已验收，分析工具可运行。Kp1.0且关闭积分后仍静止摆动；当前为[纯比例对照](P_ONLY_DIAGNOSTIC_TEST.md)，保留连杆IMU闭环及保护。每版单独提交、打标签并备份。MCU编译和烧录由用户执行，实物验收前不称稳定版。
 
 ## 查看代码
 

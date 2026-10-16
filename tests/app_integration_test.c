@@ -457,6 +457,16 @@ int main(void)
     if (APP_HOLD_KI == 0.0f) {
         uint16_t expected;
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+        if (APP_HOLD_KD == 0.0f) {
+            const float jumps[] = {1.0f, -1.0f, 0.0f};
+            unsigned int index;
+            for (index = 0; index < sizeof(jumps)/sizeof(jumps[0]); ++index) {
+                pose = jumps[index]; Until(at + 40u);
+                expected = (uint16_t)(500.0f + (90.0f - APP_HOLD_DIRECTION * APP_HOLD_KP * pose) *
+                    (2000.0f / 180.0f) + 0.5f);
+                assert(pulse == expected); /* No derivative kick/tail on +/-1deg sample steps. */
+            }
+        }
         pose = 5.0f; Until(at + 2000u);
         expected = (uint16_t)(500.0f + (90.0f - APP_HOLD_DIRECTION * APP_HOLD_KP * 5.0f) *
             (2000.0f / 180.0f) + 0.5f);

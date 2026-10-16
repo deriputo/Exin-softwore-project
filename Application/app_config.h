@@ -19,7 +19,8 @@
 /* Static oscillation diagnosis only: disable integral, retain P/D. */
 #define APP_HOLD_NORMAL_KI 0.0f
 #define APP_HOLD_INTEGRAL_ERROR_SCALE_DEG 8.0f
-#define APP_HOLD_NORMAL_KD 0.02f
+/* Static oscillation diagnosis: pure P, no I or D contribution. */
+#define APP_HOLD_NORMAL_KD 0.0f
 #if APP_HOLD_DIAGNOSTIC
 #define APP_HOLD_KP 0.5f
 #define APP_HOLD_KI 0.0f
