@@ -11,6 +11,9 @@ typedef struct {
     float tilt_pitch, tilt_pitch_sum, zero_tilt_pitch;
     uint16_t calibration_count;
     uint32_t previous_ms;
+    uint32_t last_gravity_ms;
+    uint32_t gyro_bridge_count;
+    bool have_gravity_reference;
     bool calibrated;
     bool first;
 } IMUCore;

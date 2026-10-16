@@ -1,5 +1,9 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+当前活动源码：v0.11.0-imu-gyro-bridge-test，OLED为HOLD Y PIDR3。用户授权加速度暂时不可信时最长100ms陀螺仪接续，超时及真实通信/采样故障仍保护。RAW追加MODE/REFAGE/BRIDGE；五项主机检查通过，未实物验收。控制参数与积分修复不变；慢速验收标签v0.10.1完整保留。 [本版步骤](docs/IMU_GYRO_BRIDGE_TEST.md)。
+
+以下为历史记录。
+
 当前活动源码为v0.10.2-pidr-slew-fix-test，OLED显示HOLD Y PIDR2。只修复PID在限速时整轮拒绝积分导致的大误差冻结，P0.7/Ki6/Kd0.005与保护不变。四项主机检查通过，实物待验收；wide模型仍不合格，不能视为全部高速问题解决。用户慢速验收版独立保存在v0.10.1-pidr-slow-accepted及ZIP。 [本轮说明](docs/PIDR_SLEW_FIX_TEST.md)。
 
 以下为历史记录。

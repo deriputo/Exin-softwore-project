@@ -24,6 +24,70 @@ static void Update(IMUCore *core, const uint8_t raw[14], uint32_t now, IMUSample
 #endif
     IMUCore_Update(core, wire, now, sample);
 }
+static void Calibrate(IMUCore *core, uint8_t raw[14], uint32_t *now, IMUSample *s)
+{
+    unsigned int i;
+    IMUCore_Init(core); memset(raw, 0, 14); Word(raw + 4, 16384);
+    for (i = 0; i < IMU_CALIBRATION_SAMPLES; ++i) Update(core, raw, *now += 10u, s);
+    assert(s->valid && s->calibrated && s->accel_trusted && !s->gyro_only);
+}
+static void BridgeTests(void)
+{
+    IMUCore core; IMUSample s; uint8_t raw[14]; uint32_t now = 0, start; unsigned int i;
+    Calibrate(&core, raw, &now, &s); start = now;
+    /* Same low gravity-plane projection as the user's fault record, encoded
+       in mechanism axes; 100dps around the selected Y axis. */
+    Word(raw, -1360); Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 6550);
+    for (i = 1; i <= 10; ++i) {
+        Update(&core, raw, now = start + i * 10u, &s);
+        assert(s.valid && s.gyro_only && !s.accel_trusted);
+        assert(s.gravity_age_ms == i * 10u && fabsf(s.pitch_deg - i) < .01f);
+    }
+    Update(&core, raw, now += 10u, &s);
+    assert(!s.valid && !s.gyro_only && s.gravity_age_ms == 110);
+    assert(s.gyro_bridge_count == 10);
+    assert(fabsf(s.pitch_deg - 10) < .01f); /* Expired bridge does not keep integrating. */
+    memset(raw, 0, 14); Word(raw + 4, 16384); Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.accel_trusted && !s.gyro_only && s.gravity_age_ms == 0);
+    assert(fabsf(s.pitch_deg) < .01f); /* Reacquire only from trusted gravity. */
+    assert(s.gyro_bridge_count == 10);
+    Word(raw + 4, 2834); Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.gyro_only);
+    Word(raw + 4, 16384); Update(&core, raw, now += 10u, &s);
+    assert(s.valid && s.accel_trusted && s.gravity_age_ms == 0 && !s.gyro_only);
+
+    /* Plausible projection alone is insufficient: sustained nongravity norm
+       cannot refresh the budget. A short interval still has gyro continuity. */
+    Word(raw + 4, 21299); start = now;
+    Update(&core, raw, now += 10u, &s); assert(s.valid && s.gyro_only);
+    Update(&core, raw, now = start + 110u, &s); assert(!s.valid);
+
+    Calibrate(&core, raw, &now, &s);
+    memset(raw, 0, 14); Update(&core, raw, now += 10u, &s);
+    assert(!s.valid); /* All-zero frames are never bridged. */
+    Word(raw + 4, 2834); Update(&core, raw, now += 10u, &s);
+    assert(!s.valid); /* A hard invalid frame broke continuity. */
+
+    Calibrate(&core, raw, &now, &s); Word(raw + 10, 32767);
+    Update(&core, raw, now += 10u, &s); assert(!s.valid && s.gyro_saturated);
+    Word(raw + 10, -32768); Update(&core, raw, now += 10u, &s);
+    assert(!s.valid && s.gyro_saturated);
+
+    Calibrate(&core, raw, &now, &s); Word(raw + 4, 2834);
+    Update(&core, raw, now += 101u, &s); assert(!s.valid); /* Unknown gap cannot be integrated. */
+
+    Calibrate(&core, raw, &now, &s); Update(&core, raw, now = 0xfffffff0u, &s);
+    assert(s.valid); Word(raw + 4, 2834);
+    Update(&core, raw, now + 20u, &s); assert(s.valid && s.gyro_only && s.gravity_age_ms == 20);
+    Update(&core, raw, now + 101u, &s); assert(!s.valid && s.gravity_age_ms == 101);
+
+    IMUCore_Init(&core); memset(raw, 0, 14); Word(raw + 4, 2834);
+    Update(&core, raw, 10, &s); assert(!s.valid && !s.calibrated);
+    assert(s.gravity_age_ms == UINT32_MAX);
+    Word(raw + 4, 16384); Update(&core, raw, 20, &s);
+    assert(!s.calibrated); Word(raw + 4, 2834); Update(&core, raw, 30, &s);
+    assert(!s.valid); /* No gyro-only bridge before calibration. */
+}
 int main(void)
 {
     IMUCore core;
@@ -78,7 +142,9 @@ int main(void)
         }
     }
     memset(raw, 0, sizeof(raw)); Word(raw + 2, 16384); /* Gravity parallel to Y: inclination unobservable. */
-    Update(&core, raw, now += 10u, &sample); assert(!sample.valid);
-    puts("PASS: IMU calibration/fusion and signed Y inclination beyond90 without fold, invalid projection");
+    Update(&core, raw, now += 10u, &sample); assert(sample.valid && sample.gyro_only);
+    Update(&core, raw, now += 101u, &sample); assert(!sample.valid);
+    BridgeTests();
+    puts("PASS: IMU calibration/fusion, bounded gyro bridge, timeout/recovery, zero/clipped/gapped frames and rollover");
     return 0;
 }

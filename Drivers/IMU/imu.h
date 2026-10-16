@@ -10,6 +10,11 @@ typedef struct {
     uint32_t timestamp_ms;
     bool valid;
     bool calibrated;
+    bool accel_trusted;
+    bool gyro_only;
+    bool gyro_saturated;
+    uint32_t gravity_age_ms; /* UINT32_MAX: no accepted gravity reference yet. */
+    uint32_t gyro_bridge_count; /* Accepted gyro-only frames since initialization/calibration. */
 } IMUSample;
 typedef enum { IMU_STARTING, IMU_CALIBRATING, IMU_READY, IMU_FAULT } IMUStatus;
 void IMU_Init(uint32_t now_ms);

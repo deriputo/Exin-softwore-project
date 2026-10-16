@@ -7,6 +7,8 @@
 #define IMU_CALIBRATION_SAMPLES 200u
 #define IMU_CALIBRATION_TIMEOUT_MS 10000u
 #define IMU_FILTER_TAU_SECONDS 0.5f
+#define IMU_GYRO_BRIDGE_MS 100u
+#define IMU_GYRO_SATURATION_RAW 32700
 /* Actual rod mount: mechanism (X,Y,Z) = sensor (X,Z,-Y). */
 #define IMU_MOUNT_ROTATE_X_90 1u
 #endif

@@ -94,7 +94,10 @@ static void RecordHoldFault(const ControlSnapshot *state)
     else if (source[0]) { /* Keep the original communication/calibration stage. */ }
     else if (hold_fault.age_ms > IMU_STALE_MS) { source = "SAMPLE_STALE"; }
     else if (!hold_fault.imu.calibrated) { source = "UNCALIBRATED"; }
+    else if (hold_fault.imu.gyro_saturated) { source = "GYRO_RANGE"; }
     else if (!(norm_squared > 0.0025f && norm_squared < 16.0f)) { source = "ACCEL_NORM"; }
+    else if (!hold_fault.imu.accel_trusted && hold_fault.imu.gravity_age_ms != UINT32_MAX &&
+             hold_fault.imu.gravity_age_ms > IMU_GYRO_BRIDGE_MS) { source = "GRAVITY_TIMEOUT"; }
     else if (!(projection >= 0.04f)) { source = "AXIS_PROJECTION"; }
     else { source = "CONTROL_INPUT"; }
     (void)snprintf(hold_fault.source, sizeof(hold_fault.source), "%s", source);
@@ -319,13 +322,15 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         Decimal(y, sizeof(y), imu_sample.gyro_y_dps, 1);
         Decimal(z, sizeof(z), imu_sample.gyro_z_dps, 1);
         (void)snprintf(reply, cap,
-            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s\r\n",
+            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s MODE=%s REFAGE=%lu BRIDGE=%lu\r\n",
             (long)Protocol_FloatToTenths(imu_sample.accel_x_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_y_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_z_g * 100.0f), x, y, z,
             (unsigned int)imu_sample.valid, (unsigned int)imu_sample.calibrated,
             (unsigned int)IMU_GetCalibrationCount(), (unsigned long)(at - imu_sample.timestamp_ms),
-            IMU_GetFaultReason()[0] ? IMU_GetFaultReason() : "NONE");
+            IMU_GetFaultReason()[0] ? IMU_GetFaultReason() : "NONE",
+            !imu_sample.valid ? "INVALID" : (imu_sample.gyro_only ? "GYRO" : "ACC"),
+            (unsigned long)imu_sample.gravity_age_ms, (unsigned long)imu_sample.gyro_bridge_count);
         break;
     case PROTOCOL_CMD_IMU_FAULT_QUERY:
         if (!hold_fault.captured) {
@@ -333,14 +338,15 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         }
         (void)snprintf(reply, cap,
             "LAST_FAULT=%s AT=%lu SRC=\"%s\" AGE=%lu VALID=%u CAL=%u COUNT=%u "
-            "AX=%+ld AY=%+ld AZ=%+ld mg OUT=%uus\r\n",
+            "AX=%+ld AY=%+ld AZ=%+ld mg OUT=%uus REFAGE=%lu GYROCLIP=%u\r\n",
             Control_FaultName(hold_fault.fault), (unsigned long)hold_fault.at_ms,
             hold_fault.source, (unsigned long)hold_fault.age_ms,
             (unsigned int)hold_fault.imu.valid, (unsigned int)hold_fault.imu.calibrated,
             (unsigned int)hold_fault.calibration_count,
             (long)Protocol_FloatToTenths(hold_fault.imu.accel_x_g * 100.0f),
             (long)Protocol_FloatToTenths(hold_fault.imu.accel_y_g * 100.0f),
-            (long)Protocol_FloatToTenths(hold_fault.imu.accel_z_g * 100.0f), hold_fault.pulse_us);
+            (long)Protocol_FloatToTenths(hold_fault.imu.accel_z_g * 100.0f), hold_fault.pulse_us,
+            (unsigned long)hold_fault.imu.gravity_age_ms, (unsigned int)hold_fault.imu.gyro_saturated);
         break;
     case PROTOCOL_CMD_SERVO_SET:
         result = Control_SetManualAngle(&control, cmd->angle_deg);
@@ -498,7 +504,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_POSITION_PID_TEST ? "HOLD Y PIDR2" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y"))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);

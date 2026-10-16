@@ -30,12 +30,19 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     float g[3], norm, accel_roll, accel_pitch, accel_tilt_pitch, projection, dt, alpha;
     float roll_rad, pitch_rad, cosine, sine, cos_pitch;
     float ax, ay, az;
+    bool frame_usable, gravity_trusted;
     unsigned int i;
     sample->accel_x_g = SignedWord(raw) / 16384.0f;
     sample->accel_y_g = SignedWord(raw + 2) / 16384.0f;
     sample->accel_z_g = SignedWord(raw + 4) / 16384.0f;
     sample->temperature_c = SignedWord(raw + 6) / 340.0f + 36.53f;
-    for (i = 0; i < 3; ++i) g[i] = SignedWord(raw + 8 + i * 2) / 65.5f;
+    sample->gyro_saturated = false;
+    for (i = 0; i < 3; ++i) {
+        int16_t word = SignedWord(raw + 8 + i * 2);
+        if (word >= IMU_GYRO_SATURATION_RAW || word <= -IMU_GYRO_SATURATION_RAW)
+            sample->gyro_saturated = true;
+        g[i] = word / 65.5f;
+    }
     norm = sqrtf(sample->accel_x_g * sample->accel_x_g +
                  sample->accel_y_g * sample->accel_y_g +
                  sample->accel_z_g * sample->accel_z_g);
@@ -50,6 +57,9 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     /* Signed single-axis Y inclination: preserve which side of vertical the
        mechanism occupies. Conventional Euler Pitch folds at +/-90 degrees. */
     projection = ax * ax + az * az;
+    gravity_trusted = norm >= 0.8f && norm <= 1.2f && projection >= 0.04f;
+    frame_usable = norm > 0.05f && norm < 4.0f && !sample->gyro_saturated;
+    sample->accel_trusted = gravity_trusted;
     accel_tilt_pitch = atan2f(-ax, az) * RAD_TO_DEG;
     if (!core->calibrated) {
         bool still = norm >= 0.85f && norm <= 1.15f && projection >= 0.04f &&
@@ -94,13 +104,21 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     { float mapped_y = g[2]; g[2] = -g[1]; g[1] = mapped_y; }
 #endif
     dt = (uint32_t)(now_ms - core->previous_ms) * 0.001f;
-    if (core->first || dt > 0.1f) {
-        /* Reacquire gravity after a gap; do not integrate an unknown interval. */
-        core->roll = accel_roll;
-        core->pitch = accel_pitch;
-        core->tilt_pitch = accel_tilt_pitch;
-        core->first = false;
-    } else {
+    if (!frame_usable) {
+        /* Zero/corrupt-range frames and clipped gyros cannot seed prediction. */
+        core->first = true;
+    } else if (core->first || dt > 0.1f) {
+        /* Never initialize/reacquire from acceleration rejected as gravity. */
+        if (gravity_trusted) {
+            core->roll = accel_roll;
+            core->pitch = accel_pitch;
+            core->tilt_pitch = accel_tilt_pitch;
+            core->first = false;
+            core->last_gravity_ms = now_ms;
+            core->have_gravity_reference = true;
+        } else core->first = true;
+    } else if (gravity_trusted || (core->calibrated && core->have_gravity_reference &&
+               (uint32_t)(now_ms - core->last_gravity_ms) <= IMU_GYRO_BRIDGE_MS)) {
         roll_rad = core->roll * DEG_TO_RAD;
         pitch_rad = core->pitch * DEG_TO_RAD;
         sine = sinf(roll_rad);
@@ -114,7 +132,7 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
         core->roll = Wrap(core->roll);
         core->pitch = Wrap(core->pitch);
         core->tilt_pitch = Wrap(core->tilt_pitch + g[1] * dt);
-        if (norm >= 0.8f && norm <= 1.2f) {
+        if (gravity_trusted) {
             alpha = IMU_FILTER_TAU_SECONDS / (IMU_FILTER_TAU_SECONDS + dt);
             core->roll = Wrap(core->roll + (1.0f - alpha) * Wrap(accel_roll - core->roll));
             core->pitch += (1.0f - alpha) * Wrap(accel_pitch - core->pitch);
@@ -122,13 +140,21 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
                 core->tilt_pitch = Wrap(core->tilt_pitch +
                     (1.0f - alpha) * Wrap(accel_tilt_pitch - core->tilt_pitch));
             }
+            core->last_gravity_ms = now_ms;
+            core->have_gravity_reference = true;
         }
-    }
+    } else core->first = true; /* Expired reference: wait for trusted gravity. */
     core->previous_ms = now_ms;
     sample->roll_deg = Wrap(core->roll - core->zero_roll);
     sample->pitch_deg = Wrap(core->tilt_pitch - core->zero_tilt_pitch);
     sample->yaw_deg = core->yaw;
     sample->timestamp_ms = now_ms;
-    sample->valid = norm > 0.05f && norm < 4.0f && projection >= 0.04f;
+    sample->gravity_age_ms = core->have_gravity_reference ?
+        (uint32_t)(now_ms - core->last_gravity_ms) : UINT32_MAX;
+    sample->valid = frame_usable && !core->first && core->have_gravity_reference &&
+        (gravity_trusted || (core->calibrated && sample->gravity_age_ms <= IMU_GYRO_BRIDGE_MS));
+    sample->gyro_only = sample->valid && !gravity_trusted;
+    if (sample->gyro_only && core->gyro_bridge_count != UINT32_MAX) ++core->gyro_bridge_count;
+    sample->gyro_bridge_count = core->gyro_bridge_count;
     sample->calibrated = core->calibrated;
 }

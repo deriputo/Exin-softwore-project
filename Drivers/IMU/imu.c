@@ -38,6 +38,7 @@ static void Fault(uint32_t now_ms, const char *stage)
                          request.result == I2C_BUS_TIMEOUT ? "TIMEOUT" : "BUS ERROR";
     (void)snprintf(fault_reason, sizeof(fault_reason), "%s %s", stage, reason);
     latest.valid = false;
+    latest.gyro_only = false;
     status = IMU_FAULT;
     state = RETRY_WAIT;
     state_ms = now_ms;
@@ -45,6 +46,7 @@ static void Fault(uint32_t now_ms, const char *stage)
 void IMU_Init(uint32_t now_ms)
 {
     memset(&latest, 0, sizeof(latest));
+    latest.gravity_age_ms = UINT32_MAX;
     memset(&request, 0, sizeof(request));
     IMUCore_Init(&core);
     state = START_DELAY;
@@ -70,6 +72,7 @@ bool IMU_GetSample(IMUSample *sample)
     if (sample == 0) return false;
     *sample = latest;
     sample->valid = latest.valid && (uint32_t)(latest_ms - latest.timestamp_ms) <= IMU_STALE_MS;
+    sample->gyro_only = sample->valid && latest.gyro_only;
     return sample->valid;
 }
 bool IMU_RequestCalibration(void)
@@ -77,6 +80,9 @@ bool IMU_RequestCalibration(void)
     if (state != SAMPLE_SUBMIT && state != SAMPLE_WAIT) return false;
     IMUCore_StartCalibration(&core);
     latest.calibrated = false;
+    latest.gyro_only = false;
+    latest.gyro_bridge_count = 0;
+    latest.gravity_age_ms = UINT32_MAX;
     status = IMU_CALIBRATING;
     calibration_ms = latest_ms;
     fault_reason[0] = '\0';

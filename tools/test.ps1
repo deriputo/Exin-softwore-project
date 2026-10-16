@@ -23,6 +23,7 @@ $cases = @(
     @{name='protocol'; sources=@('Protocol/protocol.c')},
     @{name='ui_core'; sources=@('Application/ui_core.c')},
     @{name='imu_core'; sources=@('Drivers/IMU/imu_core.c')},
+    @{name='imu_bridge_control'; sources=@('Drivers/IMU/imu_core.c','Drivers/Control/control.c')},
     @{name='oled_gfx'; sources=@('Drivers/OLED/oled_gfx.c') + $font},
     @{name='i2c_bus'; fake='tests/i2c_fake'; sources=@('Drivers/I2C/i2c_bus.c')},
     @{name='display_imu_state'; sources=@('Drivers/IMU/imu.c','Drivers/IMU/imu_core.c','Drivers/OLED/oled.c','Drivers/OLED/oled_gfx.c') + $font}

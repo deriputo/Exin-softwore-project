@@ -7,6 +7,7 @@
 static I2CBusRequest *active;
 static unsigned int imu_reads, oled_data_chunks, oled_commands;
 static bool fail_imu;
+static bool weak_accel;
 static bool fail_oled_data;
 static uint8_t device_address = 0x68, device_id = 0x68;
 static I2CBusResult failure = I2C_BUS_NACK;
@@ -36,6 +37,11 @@ void I2CBus_Process(uint32_t now)
         else if (active->rx_length == 14) {
             assert(active->tx[0] == 0x3b);
             memset(active->rx, 0, 14); active->rx[2] = 0xc0; /* Actual mount: sensor Y=-1g. */
+            if (weak_accel) { /* Sensor X=-83,Y=-173,Z=5 mg. */
+                active->rx[0]=0xfa; active->rx[1]=0xb0;
+                active->rx[2]=0xf4; active->rx[3]=0xee;
+                active->rx[4]=0; active->rx[5]=82;
+            }
             ++imu_reads;
         }
         else { ++imu_writes; assert(device_id == 0x68 || device_id == 0x70); }
@@ -158,6 +164,16 @@ int main(void)
     for (now = 0; now < 3000; ++now) Tick(now);
     assert(IMU_IsReady() && IMU_GetAddress() == 0x69 && imu_writes == 7);
     device_id = 0x68;
+
+    /* Gyro bridge never conceals an actual bus failure. */
+    weak_accel = true;
+    { uint32_t until = now + 40u; for (; now < until; ++now) Tick(now); }
+    assert(IMU_GetSample(&sample) && sample.gyro_only);
+    fail_imu = true;
+    { uint32_t until = now + 30u; for (; now < until; ++now) Tick(now); }
+    assert(!IMU_GetSample(&sample) && IMU_GetStatus() == IMU_FAULT);
+    assert(strcmp(IMU_GetFaultReason(), "READ NACK") == 0);
+    weak_accel = false;
 
     /* Fault reason survives the one-second retry, including its STARTING phase. */
     fail_imu = true; I2CBus_Init(); IMU_Init(0); OLED_Init(0);

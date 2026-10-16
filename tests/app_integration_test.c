@@ -39,6 +39,8 @@ static bool imu_uncalibrated;
 static bool imu_invalid_data;
 static float imu_ax, imu_ay, imu_az;
 static uint32_t imu_age;
+static uint32_t imu_gravity_age;
+static bool imu_gyro_only, imu_gyro_clipped;
 static uint8_t frame[1024];
 static char screen[1024], rx[4096], tx[131072];
 static size_t rx_read, rx_write, tx_length;
@@ -134,6 +136,10 @@ bool IMU_GetSample(IMUSample *sample)
     sample->roll_deg = 25.0f; sample->pitch_deg = pose; /* Different axes catch a wrong selection. */
     sample->gyro_x_dps = 1.2f; sample->gyro_y_dps = -3.4f; sample->gyro_z_dps = 0.5f;
     sample->accel_x_g = imu_ax; sample->accel_y_g = imu_ay; sample->accel_z_g = imu_az;
+    sample->accel_trusted = !imu_gyro_only && !imu_invalid_data;
+    sample->gyro_only = imu_gyro_only && sample->valid;
+    sample->gravity_age_ms = imu_gravity_age;
+    sample->gyro_saturated = imu_gyro_clipped;
     return sample->valid;
 }
 IMUStatus IMU_GetStatus(void) { return imu_failed ? IMU_FAULT : IMU_READY; }
@@ -224,6 +230,7 @@ static void Reset(void)
     at = 0; display_ready_at = 100u; encoder = 0; delta = 0; pose = 0; pressed = blocked_tx = 0;
     imu_failed = false;
     imu_uncalibrated = false; imu_age = 0;
+    imu_gravity_age = 0; imu_gyro_only = imu_gyro_clipped = false;
     imu_invalid_data = false; imu_ax = 0; imu_ay = -1; imu_az = 0;
     rx_read = rx_write = tx_length = event_read = event_write = 0; tx[0] = '\0';
     bt_rx_read = bt_rx_write = bt_tx_length = bt_blocked_tx = 0; bt_tx[0] = '\0'; app_usart3.SR = 0;
@@ -498,7 +505,7 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, "HOLD Y PIDR2"));
+        assert(strstr(screen, "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
@@ -510,6 +517,18 @@ int main(void)
         Until(at + 400u);
         assert(pulse < first - 100u); /* Large error cannot freeze I at the slew threshold. */
     }
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
+    imu_gyro_only = true; imu_gravity_age = 50;
+    Feed("IMU RAW ?\n"); Until(at + 50u);
+    assert(strstr(tx, "MODE=GYRO REFAGE=50"));
+    imu_invalid_data = true; imu_gravity_age = 110;
+    Until(at + 30u); retained = pulse;
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"GRAVITY_TIMEOUT\"") && strstr(tx, "REFAGE=110"));
+    imu_invalid_data = false; imu_gyro_only = false; imu_gravity_age = 0;
+    Feed("SERVO HOLD ?\nIMU RAW ?\n"); Until(at + 50u);
+    assert(strstr(tx, "HOLD=ON FAULT=IMU_INVALID") && strstr(tx, "MODE=ACC REFAGE=0"));
+    assert(pulse == retained); /* Sensor recovery never clears the controller latch. */
     puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;
 }
