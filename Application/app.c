@@ -39,6 +39,7 @@ typedef struct {
     ControlFault fault;
     char source[24];
     uint8_t captured;
+    uint8_t gyro_config, gyro_config_verified;
 } HoldFaultRecord;
 static HoldFaultRecord hold_fault;
 
@@ -88,6 +89,7 @@ static void RecordHoldFault(const ControlSnapshot *state)
     hold_fault.pulse_us = state->pulse_us;
     hold_fault.calibration_count = IMU_GetCalibrationCount();
     hold_fault.fault = state->fault;
+    hold_fault.gyro_config_verified = (uint8_t)IMU_GetGyroConfig(&hold_fault.gyro_config);
     norm_squared = hold_fault.imu.accel_x_g * hold_fault.imu.accel_x_g +
                    hold_fault.imu.accel_y_g * hold_fault.imu.accel_y_g +
                    hold_fault.imu.accel_z_g * hold_fault.imu.accel_z_g;
@@ -265,6 +267,8 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
     size_t used;
     unsigned int i;
     uint8_t channel_mask = (uint8_t)(1u << *(const uint8_t *)context);
+    uint8_t gyro_register;
+    bool gyro_verified;
     switch (cmd->type) {
     case PROTOCOL_CMD_HELP:
         (void)snprintf(reply, cap,
@@ -327,11 +331,12 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         break;
     case PROTOCOL_CMD_IMU_RAW_QUERY:
         (void)IMU_GetSample(&imu_sample); /* Diagnostic retains raw data even when invalid/uncalibrated. */
+        gyro_verified = IMU_GetGyroConfig(&gyro_register);
         Decimal(x, sizeof(x), imu_sample.gyro_x_dps, 1);
         Decimal(y, sizeof(y), imu_sample.gyro_y_dps, 1);
         Decimal(z, sizeof(z), imu_sample.gyro_z_dps, 1);
         (void)snprintf(reply, cap,
-            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s MODE=%s REFAGE=%lu BRIDGE=%lu SETTLE=%u BUDGET=%u\r\n",
+            "RAW AX=%+ld AY=%+ld AZ=%+ld mg GX=%s GY=%s GZ=%s VALID=%u CAL=%u COUNT=%u AGE=%lu REASON=%s MODE=%s REFAGE=%lu BRIDGE=%lu SETTLE=%u BUDGET=%u RANGE=%u CFG=%02X CFGOK=%u\r\n",
             (long)Protocol_FloatToTenths(imu_sample.accel_x_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_y_g * 100.0f),
             (long)Protocol_FloatToTenths(imu_sample.accel_z_g * 100.0f), x, y, z,
@@ -341,15 +346,20 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
             !imu_sample.valid ? "INVALID" : (imu_sample.gyro_only ? "GYRO" : "ACC"),
             (unsigned long)imu_sample.gravity_age_ms, (unsigned long)imu_sample.gyro_bridge_count,
             (unsigned int)(imu_sample.valid && imu_sample.settling_fast),
-            (unsigned int)IMU_GYRO_BRIDGE_MS);
+            (unsigned int)IMU_GYRO_BRIDGE_MS, (unsigned int)IMU_GYRO_RANGE_DPS,
+            (unsigned int)gyro_register, (unsigned int)gyro_verified);
         break;
     case PROTOCOL_CMD_IMU_FAULT_QUERY:
         if (!hold_fault.captured) {
             (void)snprintf(reply, cap, "LAST_FAULT=NONE\r\n"); break;
         }
+        Decimal(x, sizeof(x), hold_fault.imu.gyro_x_dps, 1);
+        Decimal(y, sizeof(y), hold_fault.imu.gyro_y_dps, 1);
+        Decimal(z, sizeof(z), hold_fault.imu.gyro_z_dps, 1);
         (void)snprintf(reply, cap,
             "LAST_FAULT=%s AT=%lu SRC=\"%s\" AGE=%lu VALID=%u CAL=%u COUNT=%u "
-            "AX=%+ld AY=%+ld AZ=%+ld mg OUT=%uus REFAGE=%lu GYROCLIP=%u\r\n",
+            "AX=%+ld AY=%+ld AZ=%+ld mg OUT=%uus REFAGE=%lu GYROCLIP=%u "
+            "GX=%s GY=%s GZ=%s dps GRX=%d GRY=%d GRZ=%d RANGE=%u CFG=%02X CFGOK=%u\r\n",
             Control_FaultName(hold_fault.fault), (unsigned long)hold_fault.at_ms,
             hold_fault.source, (unsigned long)hold_fault.age_ms,
             (unsigned int)hold_fault.imu.valid, (unsigned int)hold_fault.imu.calibrated,
@@ -357,7 +367,10 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
             (long)Protocol_FloatToTenths(hold_fault.imu.accel_x_g * 100.0f),
             (long)Protocol_FloatToTenths(hold_fault.imu.accel_y_g * 100.0f),
             (long)Protocol_FloatToTenths(hold_fault.imu.accel_z_g * 100.0f), hold_fault.pulse_us,
-            (unsigned long)hold_fault.imu.gravity_age_ms, (unsigned int)hold_fault.imu.gyro_saturated);
+            (unsigned long)hold_fault.imu.gravity_age_ms, (unsigned int)hold_fault.imu.gyro_saturated,
+            x, y, z, (int)hold_fault.imu.gyro_raw[0], (int)hold_fault.imu.gyro_raw[1],
+            (int)hold_fault.imu.gyro_raw[2], (unsigned int)IMU_GYRO_RANGE_DPS,
+            (unsigned int)hold_fault.gyro_config, (unsigned int)hold_fault.gyro_config_verified);
         break;
     case PROTOCOL_CMD_SERVO_SET:
         result = Control_SetManualAngle(&control, cmd->angle_deg);
@@ -515,7 +528,7 @@ static void Render(void)
     case UI_IMU: RenderIMU(); break;
     case UI_SERVO:
         Text(0, 14, "%s %s", s->hold_enabled ?
-            (APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? "HOLD Y S200" : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
+            (APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? (IMU_GYRO_RANGE_DPS == 1000u ? "HOLD Y G1K" : "HOLD Y S200") : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : (APP_POSITION_PID_TEST ? "HOLD Y PIDR3" : (APP_CONTROL_MODE == CONTROL_MODE_DIRECT ? "HOLD Y DIRECT+" : (APP_HOLD_DIAGNOSTIC ? "HOLD Y TEST" : "HOLD Y")))) : "MANUAL", ui.servo_dirty ? "EDIT" : "");
         if (s->hold_enabled) {
             (void)Protocol_FormatTenths(a, sizeof(a), ui.attitude_edit_tenths, 1);
             Decimal(b, sizeof(b), s->measured_deg, 1);

@@ -1,5 +1,6 @@
 #include "i2c_bus.h"
 #include "imu.h"
+#include "imu_config.h"
 #include "oled.h"
 #include <assert.h>
 #include <stdio.h>
@@ -12,6 +13,10 @@ static bool fail_oled_data;
 static uint8_t device_address = 0x68, device_id = 0x68;
 static I2CBusResult failure = I2C_BUS_NACK;
 static unsigned int imu_writes;
+static uint8_t gyro_register;
+static int gyro_override = -1;
+static unsigned int gyro_verify_reads;
+static I2CBusResult verify_failure = I2C_BUS_OK;
 static uint8_t display[1024];
 static uint16_t display_at;
 void I2CBus_Init(void) { active = 0; }
@@ -33,7 +38,16 @@ void I2CBus_Process(uint32_t now)
         if (fail_imu || (device_address && active->address != device_address)) {
             active->result = fail_imu ? failure : I2C_BUS_NACK; active = 0; return;
         }
-        if (active->rx_length == 1) { assert(active->tx[0] == 0x75); active->rx[0] = device_id; }
+        if (active->rx_length == 1) {
+            if (active->tx[0] == 0x75) active->rx[0] = device_id;
+            else {
+                assert(active->tx[0] == 0x1b); ++gyro_verify_reads;
+                if (verify_failure != I2C_BUS_OK) {
+                    active->result = verify_failure; active = 0; return;
+                }
+                active->rx[0] = gyro_override < 0 ? gyro_register : (uint8_t)gyro_override;
+            }
+        }
         else if (active->rx_length == 14) {
             assert(active->tx[0] == 0x3b);
             memset(active->rx, 0, 14); active->rx[2] = 0xc0; /* Actual mount: sensor Y=-1g. */
@@ -44,7 +58,12 @@ void I2CBus_Process(uint32_t now)
             }
             ++imu_reads;
         }
-        else { ++imu_writes; assert(device_id == 0x68 || device_id == 0x70); }
+        else {
+            ++imu_writes; assert(device_id == 0x68 || device_id == 0x70);
+            if (active->tx[0] == 0x1b) {
+                assert(active->tx[1] == 0x10); gyro_register = active->tx[1];
+            }
+        }
     } else {
         assert(active->address == 0x3c);
         if (active->tx[0] == 0x40) {
@@ -74,6 +93,7 @@ int main(void)
     I2CBus_Init(); IMU_Init(0); OLED_Init(0);
     for (now = 0; now < 3000; ++now) Tick(now);
     assert(IMU_IsReady() && IMU_GetSample(&sample) && sample.calibrated);
+    { uint8_t value; assert(IMU_GetGyroConfig(&value) && value == 0x10 && gyro_verify_reads == 1); }
     assert(imu_reads >= 200 && OLED_IsReady() && OLED_IsPowered());
     assert(oled_data_chunks == 64); /* Initial RAM is unknown, including zero bytes. */
     OLED_Clear(); OLED_DrawPixel(0, 0, true); OLED_Present();
@@ -194,12 +214,38 @@ int main(void)
     for (now = 0; now < 500; ++now) Tick(now);
     assert(strcmp(IMU_GetFaultReason(), "WHO BUS ERROR") == 0);
 
+    /* Range readback mismatch must block both samples and calibration. */
+    fail_imu = false;
+    device_address = 0x68; device_id = 0x70; gyro_override = 0x08;
+    imu_reads = gyro_verify_reads = 0; I2CBus_Init(); IMU_Init(0); OLED_Init(0);
+    for (now = 0; now < 500; ++now) Tick(now);
+    assert(IMU_GetStatus() == IMU_FAULT && !IMU_GetSample(&sample) && !imu_reads);
+    assert(!IMU_RequestCalibration() && gyro_verify_reads == 1);
+    { uint8_t value; assert(!IMU_GetGyroConfig(&value) && value == 0x08); }
+    assert(strcmp(IMU_GetFaultReason(), "GYRO CFG=08") == 0);
+    gyro_override = -1;
+    for (; now < 4000; ++now) Tick(now);
+    assert(IMU_IsReady() && IMU_GetCalibrationCount() == 200);
+    { uint8_t value; assert(IMU_GetGyroConfig(&value) && value == 0x10); }
+    {
+        const I2CBusResult failures[] = {I2C_BUS_NACK, I2C_BUS_TIMEOUT, I2C_BUS_ERROR};
+        const char *reasons[] = {"GYRO CFG NACK", "GYRO CFG TIMEOUT", "GYRO CFG BUS ERROR"};
+        unsigned int j;
+        for (j = 0; j < 3; ++j) {
+            verify_failure = failures[j]; imu_reads = 0;
+            I2CBus_Init(); IMU_Init(0); OLED_Init(0);
+            for (now = 0; now < 500; ++now) Tick(now);
+            assert(IMU_GetStatus() == IMU_FAULT && !IMU_GetGyroConfig(0) && !imu_reads);
+            assert(strcmp(IMU_GetFaultReason(), reasons[j]) == 0);
+        }
+        verify_failure = I2C_BUS_OK;
+    }
     /* An unexpected chip ID must never receive reset/config writes. */
     fail_imu = false; device_address = 0; device_id = 0x71; imu_writes = 0;
     I2CBus_Init(); IMU_Init(0); OLED_Init(0);
     for (now = 0; now < 500; ++now) Tick(now);
     assert(IMU_GetStatus() == IMU_FAULT && !imu_writes && !IMU_GetSample(&sample));
     assert(strcmp(IMU_GetFaultReason(), "WHO ID=71") == 0);
-    puts("PASS: shared-bus IMU/OLED, 0x68/0x69 discovery, retained NACK/timeout/bus/ID diagnostics, no writes to wrong chip");
+    puts("PASS: shared-bus IMU/OLED, ID/address discovery, verified1000dps range, mismatch/readback failures block samples, retry and retained diagnostics");
     return 0;
 }

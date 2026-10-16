@@ -139,6 +139,9 @@ bool IMU_GetSample(IMUSample *sample)
     sample->timestamp_ms = at - imu_age;
     sample->roll_deg = 25.0f; sample->pitch_deg = pose; /* Different axes catch a wrong selection. */
     sample->gyro_x_dps = 1.2f; sample->gyro_y_dps = -3.4f; sample->gyro_z_dps = imu_gz;
+    sample->gyro_raw[0] = (int16_t)(1.2f * IMU_GYRO_LSB_PER_DPS);
+    sample->gyro_raw[1] = (int16_t)(-3.4f * IMU_GYRO_LSB_PER_DPS);
+    sample->gyro_raw[2] = (int16_t)(imu_gz * IMU_GYRO_LSB_PER_DPS);
     sample->accel_x_g = imu_ax; sample->accel_y_g = imu_ay; sample->accel_z_g = imu_az;
     sample->accel_trusted = !imu_gyro_only && !imu_invalid_data;
     sample->gyro_only = imu_gyro_only && sample->valid;
@@ -150,6 +153,7 @@ IMUStatus IMU_GetStatus(void) { return imu_failed ? IMU_FAULT : IMU_READY; }
 uint8_t IMU_GetAddress(void) { return 0x68; }
 const char *IMU_GetFaultReason(void) { return imu_failed ? "WHO NACK" : ""; }
 uint16_t IMU_GetCalibrationCount(void) { return imu_uncalibrated ? 42u : 200u; }
+bool IMU_GetGyroConfig(uint8_t *value) { if (value) *value = 0x10; return true; }
 bool IMU_RequestCalibration(void) { return true; }
 void IMU_SetPaused(bool paused) { (void)paused; }
 void OLED_Init(uint32_t ms) { (void)ms; display_power = true; }
@@ -440,6 +444,12 @@ int main(void)
     imu_uncalibrated = true; Step(); imu_uncalibrated = false;
     Feed("IMU FAULT ?\n"); Until(at + 50u);
     assert(strstr(tx, "SRC=\"UNCALIBRATED\""));
+    Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+    imu_gz = 999; imu_gyro_clipped = true; imu_invalid_data = true; Step();
+    imu_gz = .5f; imu_gyro_clipped = false; imu_invalid_data = false;
+    Feed("IMU FAULT ?\n"); Until(at + 50u);
+    assert(strstr(tx, "SRC=\"GYRO_RANGE\"") && strstr(tx, "GZ=+999.0"));
+    assert(strstr(tx, "GRZ=32767") && strstr(tx, "RANGE=1000 CFG=10 CFGOK=1"));
 
     Reset(); Feed("TIME(14:"); BluetoothFeed("HELP\r\n"); Until(at + 100u);
     assert(strstr(bt_tx, "TIME(hh:mm:ss)") && !tx_length);
@@ -512,7 +522,7 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? "HOLD Y S200" : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : "HOLD Y PIDR3"));
+        assert(strstr(screen, APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? (IMU_GYRO_BRIDGE_MS == 200u ? (IMU_GYRO_RANGE_DPS == 1000u ? "HOLD Y G1K" : "HOLD Y S200") : "HOLD Y SOFT") : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
@@ -543,6 +553,7 @@ int main(void)
     Feed("IMU RAW ?\n"); Until(at + 50u);
     assert(strstr(tx, "MODE=GYRO REFAGE=50"));
     assert(strstr(tx, "BUDGET=200"));
+    assert(strstr(tx, "RANGE=1000 CFG=10 CFGOK=1"));
     imu_invalid_data = true; imu_gravity_age = IMU_GYRO_BRIDGE_MS + 10u;
     Until(at + 30u); retained = pulse;
     Feed("IMU FAULT ?\n"); Until(at + 50u);

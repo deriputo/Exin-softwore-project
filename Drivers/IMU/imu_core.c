@@ -40,9 +40,10 @@ void IMUCore_Update(IMUCore *core, const uint8_t raw[14], uint32_t now_ms, IMUSa
     sample->settling_fast = false;
     for (i = 0; i < 3; ++i) {
         int16_t word = SignedWord(raw + 8 + i * 2);
+        sample->gyro_raw[i] = word;
         if (word >= IMU_GYRO_SATURATION_RAW || word <= -IMU_GYRO_SATURATION_RAW)
             sample->gyro_saturated = true;
-        g[i] = word / 65.5f;
+        g[i] = word / IMU_GYRO_LSB_PER_DPS;
     }
     norm = sqrtf(sample->accel_x_g * sample->accel_x_g +
                  sample->accel_y_g * sample->accel_y_g +

@@ -37,7 +37,7 @@ static void BridgeTests(void)
     Calibrate(&core, raw, &now, &s); start = now;
     /* Same low gravity-plane projection as the user's fault record, encoded
        in mechanism axes; 100dps around the selected Y axis. */
-    Word(raw, -1360); Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 6550);
+    Word(raw, -1360); Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 3280);
     for (i = 1; i <= IMU_GYRO_BRIDGE_MS / 10u; ++i) {
         Update(&core, raw, now = start + i * 10u, &s);
         assert(s.valid && s.gyro_only && !s.accel_trusted);
@@ -104,7 +104,7 @@ static void FaultNormBridgeTests(void)
     /* The user's fault acceleration, expressed in mechanism axes. With the
        actual X90 mounting the wire frame is AX370/AY1186/AZ40mg (~1.243g).
        Gyro100dps is synthetic; the fault snapshot did not record gyro values. */
-    Word(raw, 6062); Word(raw + 2, 655); Word(raw + 4, -19431); Word(raw + 10, 6550);
+    Word(raw, 6062); Word(raw + 2, 655); Word(raw + 4, -19431); Word(raw + 10, 3280);
     for (i = 1; i <= 20; ++i) {
         Update(&core, raw, now += 10u, &s);
         assert(s.valid && s.gyro_only && !s.accel_trusted && !s.settling_fast);
@@ -129,6 +129,28 @@ static void FaultNormBridgeTests(void)
     Update(&core, raw, now += 10u, &s); assert(!s.valid && s.gravity_age_ms == 210u);
     puts("PASS: user fault acceleration shape stays gyro-only at110/200ms, invalid at201ms; trusted recovery refreshes bounded budget, expires at210ms");
 }
+static void RangeTests(void)
+{
+    IMUCore core; IMUSample s; uint8_t raw[14]; uint32_t now = 0;
+    Calibrate(&core, raw, &now, &s);
+    /* Independent known counts: 19680/32.8=600, 29520/32.8=900.
+       These must not be computed using the production scale under test. */
+    Word(raw + 8, 19680); Word(raw + 10, -19680); Word(raw + 12, 29520);
+    Update(&core, raw, now += 10, &s);
+    assert(s.valid && !s.gyro_saturated && fabsf(s.gyro_x_dps - 600) < .001f);
+#if IMU_MOUNT_ROTATE_X_90
+    assert(fabsf(s.gyro_y_dps + 900) < .001f && fabsf(s.gyro_z_dps + 600) < .001f);
+    assert(s.gyro_raw[0] == 19680 && s.gyro_raw[1] == -29520 && s.gyro_raw[2] == -19680);
+#else
+    assert(fabsf(s.gyro_y_dps + 600) < .001f && fabsf(s.gyro_z_dps - 900) < .001f);
+    assert(s.gyro_raw[0] == 19680 && s.gyro_raw[1] == -19680 && s.gyro_raw[2] == 29520);
+#endif
+    Word(raw + 8, 32700); Update(&core, raw, now += 10, &s);
+    assert(!s.valid && s.gyro_saturated && s.gyro_raw[0] == 32700);
+    Word(raw + 8, -32768); Update(&core, raw, now += 10, &s);
+    assert(!s.valid && s.gyro_saturated && s.gyro_raw[0] == -32768);
+    puts("PASS: independent 1000dps scale, +/-600/900dps valid, original-axis raw snapshot, near-rail rejection retained");
+}
 static void SettlingTests(void)
 {
     IMUCore core; IMUSample s; uint8_t raw[14]; uint32_t now = 0;
@@ -151,9 +173,9 @@ static void SettlingTests(void)
 
     /* Moving, excessive norm and >2deg innovation retain the old correction. */
     Calibrate(&core, raw, &now, &s); core.tilt_pitch = .7f; legacy = .7f;
-    Word(raw + 10, 655); /* Selected gyro 10dps: motion cannot qualify as quiet. */
+    Word(raw + 10, 328); /* Selected gyro 10dps: motion cannot qualify as quiet. */
     for (i = 0; i < 30; ++i) {
-        legacy = (legacy + (655.0f / 65.5f) * .01f) * alpha;
+        legacy = (legacy + 10.0f * .01f) * alpha;
         Update(&core, raw, now += 10, &s);
         assert(!s.settling_fast && !core.quiet_tracking && fabsf(s.pitch_deg - legacy) < .0001f);
     }
@@ -202,18 +224,18 @@ int main(void)
     unsigned int i;
     IMUCore_Init(&core);
     Word(raw + 4, 16384); /* Z=1g. */
-    Word(raw + 8, 65); /* Static gyro bias, ~1dps. */
+    Word(raw + 8, 33); /* Static gyro bias, ~1dps at1000dps full scale. */
     for (i = 0; i < 50; ++i) Update(&core, raw, now += 10u, &sample);
     assert(!sample.calibrated && core.calibration_count == 50);
     Word(raw + 8, 1000); /* Motion resets entire calibration window. */
     Update(&core, raw, now += 10u, &sample);
     assert(core.calibration_count == 0);
-    Word(raw + 8, 65);
+    Word(raw + 8, 33);
     for (i = 0; i < IMU_CALIBRATION_SAMPLES; ++i) Update(&core, raw, now += 10u, &sample);
     assert(sample.calibrated && sample.valid);
     assert(fabsf(sample.gyro_x_dps) < 0.001f);
     assert(fabsf(sample.roll_deg) < 0.01f && fabsf(sample.pitch_deg) < 0.01f);
-    Word(raw + 12, 655); /* Z yaw 10 dps, acceleration cannot correct heading. */
+    Word(raw + 12, 328); /* Z yaw 10 dps, acceleration cannot correct heading. */
     for (i = 0; i < 100; ++i) Update(&core, raw, now += 10u, &sample);
     assert(fabsf(sample.yaw_deg - 10.0f) < 0.03f);
     Word(raw + 12, 0);
@@ -251,6 +273,7 @@ int main(void)
     Update(&core, raw, now += 101u, &sample); assert(!sample.valid);
     BridgeTests();
     FaultNormBridgeTests();
+    RangeTests();
     SettlingTests();
     puts("PASS: IMU calibration/fusion, bounded gyro bridge, timeout/recovery, zero/clipped/gapped frames and rollover");
     return 0;

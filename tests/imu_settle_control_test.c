@@ -17,10 +17,10 @@ static void Frame(uint8_t raw[14], float angle, float rate, float noise)
     Word(raw, (int16_t)lroundf(-sinf(radians) * 16384));
 #if IMU_MOUNT_ROTATE_X_90
     Word(raw + 2, (int16_t)lroundf(-cosf(radians) * 16384));
-    Word(raw + 12, (int16_t)lroundf(rate * 65.5f));
+    Word(raw + 12, (int16_t)lroundf(rate * IMU_GYRO_LSB_PER_DPS));
 #else
     Word(raw + 4, (int16_t)lroundf(cosf(radians) * 16384));
-    Word(raw + 10, (int16_t)lroundf(rate * 65.5f));
+    Word(raw + 10, (int16_t)lroundf(rate * IMU_GYRO_LSB_PER_DPS));
 #endif
 }
 static ControlSample Input(const IMUSample *imu)

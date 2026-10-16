@@ -53,9 +53,9 @@ int main(void)
     assert(Control_StartHold(&c, &s, now) == CONTROL_OK);
     Word(raw, -1360);
 #if IMU_MOUNT_ROTATE_X_90
-    Word(raw + 2, -2834); Word(raw + 4, 82); Word(raw + 12, 6550);
+    Word(raw + 2, -2834); Word(raw + 4, 82); Word(raw + 12, 3280);
 #else
-    Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 6550);
+    Word(raw + 2, 82); Word(raw + 4, 2834); Word(raw + 10, 3280);
 #endif
     for (i = 0; i < IMU_GYRO_BRIDGE_MS / 10u; ++i) {
         IMUCore_Update(&core, raw, now += 10, &imu); s = Input(&imu);

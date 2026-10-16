@@ -7,6 +7,7 @@ typedef struct {
     float accel_x_g, accel_y_g, accel_z_g;
     float roll_deg, pitch_deg, yaw_deg;
     float temperature_c;
+    int16_t gyro_raw[3]; /* Original sensor X/Y/Z, before bias or mounting map. */
     uint32_t timestamp_ms;
     bool valid;
     bool calibrated;
@@ -26,6 +27,8 @@ IMUStatus IMU_GetStatus(void);
 uint8_t IMU_GetAddress(void);
 const char *IMU_GetFaultReason(void); /* Last failure retained while retrying. */
 uint16_t IMU_GetCalibrationCount(void);
+/* Last GYRO_CONFIG readback; false until exact configured byte is verified. */
+bool IMU_GetGyroConfig(uint8_t *value);
 bool IMU_RequestCalibration(void);
 void IMU_SetPaused(bool paused); /* Stop new requests before low power entry. */
 #endif

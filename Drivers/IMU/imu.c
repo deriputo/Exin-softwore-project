@@ -7,9 +7,10 @@
 
 typedef enum { START_DELAY, RESET_SUBMIT, RESET_WAIT, RESET_DELAY,
                CONFIG_SUBMIT, CONFIG_WAIT, WHO_SUBMIT, WHO_WAIT,
+               GYRO_VERIFY_SUBMIT, GYRO_VERIFY_WAIT,
                SAMPLE_SUBMIT, SAMPLE_WAIT, RETRY_WAIT } State;
 static const uint8_t registers[] = { 0x6b, 0x6c, 0x19, 0x1a, 0x1b, 0x1c };
-static const uint8_t values[] = { 0x01, 0x00, 9, 3, 0x08, 0x00 };
+static const uint8_t values[] = { 0x01, 0x00, 9, 3, IMU_GYRO_CONFIG_VALUE, 0x00 };
 static State state;
 static uint8_t config_index, tx[2], rx[14];
 static uint32_t state_ms, sample_ms, calibration_ms, latest_ms;
@@ -19,6 +20,8 @@ static IMUSample latest;
 static IMUStatus status;
 static bool paused;
 static uint8_t address, alternate_tried;
+static uint8_t gyro_config_readback;
+static bool gyro_config_verified;
 static char fault_reason[22];
 
 static bool Submit(uint8_t reg, uint8_t value, uint16_t read_length, uint32_t now_ms)
@@ -55,6 +58,7 @@ void IMU_Init(uint32_t now_ms)
     status = IMU_STARTING;
     paused = false;
     address = IMU_ADDRESS; alternate_tried = 0;
+    gyro_config_readback = 0xffu; gyro_config_verified = false;
     fault_reason[0] = '\0';
 }
 void IMU_SetPaused(bool value) { paused = value; }
@@ -62,6 +66,11 @@ IMUStatus IMU_GetStatus(void) { return status; }
 uint8_t IMU_GetAddress(void) { return address; }
 const char *IMU_GetFaultReason(void) { return fault_reason; }
 uint16_t IMU_GetCalibrationCount(void) { return core.calibration_count; }
+bool IMU_GetGyroConfig(uint8_t *value)
+{
+    if (value) *value = gyro_config_readback;
+    return gyro_config_verified;
+}
 bool IMU_IsReady(void)
 {
     return status == IMU_READY && latest.valid &&
@@ -97,6 +106,7 @@ void IMU_Process(uint32_t now_ms)
         if ((uint32_t)(now_ms - state_ms) >= 100u) state = WHO_SUBMIT;
         break;
     case RESET_SUBMIT:
+        gyro_config_verified = false; gyro_config_readback = 0xffu;
         if (Submit(0x6b, 0x80, 0, now_ms)) state = RESET_WAIT;
         break;
     case RESET_WAIT:
@@ -114,13 +124,29 @@ void IMU_Process(uint32_t now_ms)
         if (request.result == I2C_BUS_PENDING) break;
         if (request.result != I2C_BUS_OK) { Fault(now_ms, "CONFIG"); break; }
         if (++config_index == sizeof(registers)) {
+            state = GYRO_VERIFY_SUBMIT;
+        }
+        else state = CONFIG_SUBMIT;
+        break;
+    case GYRO_VERIFY_SUBMIT:
+        if (Submit(0x1b, 0, 1, now_ms)) state = GYRO_VERIFY_WAIT;
+        break;
+    case GYRO_VERIFY_WAIT:
+        if (request.result == I2C_BUS_PENDING) break;
+        if (request.result != I2C_BUS_OK) { Fault(now_ms, "GYRO CFG"); break; }
+        gyro_config_readback = rx[0];
+        if (gyro_config_readback != IMU_GYRO_CONFIG_VALUE) {
+            latest.valid = false; latest.gyro_only = false;
+            status = IMU_FAULT; state = RETRY_WAIT; state_ms = now_ms;
+            (void)snprintf(fault_reason, sizeof(fault_reason), "GYRO CFG=%02X", (unsigned int)gyro_config_readback);
+        } else {
+            gyro_config_verified = true;
             IMUCore_StartCalibration(&core);
             status = IMU_CALIBRATING;
             fault_reason[0] = '\0';
             calibration_ms = now_ms; sample_ms = now_ms - IMU_SAMPLE_MS;
             state = SAMPLE_SUBMIT;
         }
-        else state = CONFIG_SUBMIT;
         break;
     case WHO_SUBMIT:
         if (Submit(0x75, 0, 1, now_ms)) state = WHO_WAIT;

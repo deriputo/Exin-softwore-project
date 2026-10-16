@@ -7,6 +7,10 @@
 #define IMU_CALIBRATION_SAMPLES 200u
 #define IMU_CALIBRATION_TIMEOUT_MS 10000u
 #define IMU_FILTER_TAU_SECONDS 0.5f
+/* GYRO_CONFIG FS_SEL=2: these three values must be changed together. */
+#define IMU_GYRO_CONFIG_VALUE 0x10u
+#define IMU_GYRO_RANGE_DPS 1000u
+#define IMU_GYRO_LSB_PER_DPS 32.8f
 /* Trial: faster selected-axis residual correction only after quiet gravity.
    This does not change calibration, validity or gyro-only bridge rules. */
 #define IMU_SETTLE_ENABLE 1u
