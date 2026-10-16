@@ -11,7 +11,8 @@ Keil入口：`Project/eXin.uvprojx`。
 | `v0.3.0-oled-dirty-test` | OLED以16字节块进行差异刷新，初始化/唤醒/通信恢复全屏重刷，额外RAM1088字节 | display_imu_state与app_integration主机测试通过；2026-10-16用户确认验收成功，仅代表本项显示优化通过，IMU故障仍未解决 |
 | `v0.4.0-trace-analysis-test` | CSV离线分析，导出HTML曲线/JSON指标；默认±1°保持1秒，固件不变 | 5项分析及3项上位机测试通过，待真实记录验收 |
 | `v0.5.0-ki050-test` | 仅将应用Ki从0.25提高至0.50，保留其他控制参数、OLED及分析工具 | control和app_integration测试通过，模型改善不等于实测，待用户编译烧录验收 |
-| `v0.6.0-nonlinear-pi-test` | 用户要求提高Kp并加入非线性变速积分：Kp1.6、Ki峰值2、误差尺度8°，含积分力度曲线 | control/app_integration通过，简化模型达标2600ms，等待实物抽动/恢复/摆动验收 |
+| `v0.6.0-nonlinear-pi-test` | Kp1.6、Ki峰值2、误差尺度8° | 软件测试通过，但实物静止左右抽动，未通过验收 |
+| `v0.6.1-nonlinear-i08-test` | 按用户要求保留Kp1.6，仅将Ki峰值2降至0.8，更新曲线 | control/app_integration通过，待先验收静止是否仍抽动 |
 
 当前分支为`codex/hold-response`。OLED差异刷新已验收，分析工具可运行。用户反馈Ki0.50仍缓慢抽动，MANUAL执行及IMU响应及时；现进入[提高Kp及变速积分试验](NONLINEAR_PI_TEST.md)，保留连杆IMU闭环，IMU保护及已知故障均未改变。每版单独提交、打标签并备份。MCU编译和烧录由用户执行，实物验收前不称稳定版。
 
