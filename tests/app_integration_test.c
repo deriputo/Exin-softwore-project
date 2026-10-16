@@ -1,5 +1,6 @@
 /* Actual application/UI/protocol/PID, with deterministic hardware doubles. */
 #include "app.h"
+#include "app_config.h"
 #include "ui_core.h"
 #include "key.h"
 #include "key_config.h"
@@ -453,6 +454,16 @@ int main(void)
     Reset(); Until(at + 61000u); assert(Power_IsIdle() && !display_power);
     BluetoothFeed("SERVO ?\r\n"); Until(at + 100u);
     assert(!Power_IsIdle() && display_power && strstr(bt_tx, "SERVO="));
-    puts("PASS: application/UI, 60s wake gestures, dual UART reply routing/partial lines/RTC serialization/TX retry/independent TRACE and Bluetooth wake");
+    if (APP_HOLD_KI == 0.0f) {
+        uint16_t expected;
+        Reset(); Feed("SERVO HOLD ON\n"); Until(at + 50u);
+        pose = 5.0f; Until(at + 2000u);
+        expected = (uint16_t)(500.0f + (90.0f - APP_HOLD_DIRECTION * APP_HOLD_KP * 5.0f) *
+            (2000.0f / 180.0f) + 0.5f);
+        assert(pulse == expected);
+        Until(at + 10000u);
+        assert(pulse == expected); /* Application really has I disabled: no slow drift. */
+    }
+    puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; zero-I profile retains P without integral drift");
     return 0;
 }

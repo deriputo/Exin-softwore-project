@@ -233,16 +233,29 @@ int main(void)
                     config.slew_deg_per_second * 0.02f + 0.001f);
                 assert(control.state.fault == CONTROL_FAULT_NONE); previous = control.state.output_angle_deg;
             }
-            assert(Abs(targets[index] - plant) < 1.0f);
+            if (APP_HOLD_KI > 0.0f) {
+                assert(Abs(targets[index] - plant) < 1.0f);
+            } else {
+                /* PD diagnosis is allowed a steady-state offset. */
+                assert(control.state.i_term == 0.0f);
+            }
         }
     }
     {
         uint32_t baseline_ms = RecoveryMs(0.8f, 0.5f, APP_HOLD_SLEW_DEG_PER_SECOND);
         uint32_t normal_ms = RecoveryWithScaleMs(APP_HOLD_KP, APP_HOLD_KI,
             APP_HOLD_SLEW_DEG_PER_SECOND, APP_HOLD_INTEGRAL_ERROR_SCALE_DEG);
-        assert(normal_ms < baseline_ms && normal_ms < 20000u);
-        printf("Simulated 8deg step incl 1s dwell: oldPI=%lu ms, nonlinearPI=%lu ms\n",
-               (unsigned long)baseline_ms, (unsigned long)normal_ms);
+        if (APP_HOLD_KI > 0.0f) {
+            assert(normal_ms < baseline_ms && normal_ms < 20000u);
+        } else {
+            assert(normal_ms == 60000u); /* Sentinel: PD does not reject this steady base offset. */
+        }
+        if (APP_HOLD_KI > 0.0f) {
+            printf("Simulated 8deg step incl 1s dwell: oldPI=%lu ms, nonlinearPI=%lu ms\n",
+                   (unsigned long)baseline_ms, (unsigned long)normal_ms);
+        } else {
+            puts("Zero-I diagnosis: steady base offset remains in model; not a settling-time trial.");
+        }
     }
     Control_DefaultConfig(&config); config.axis = CONTROL_AXIS_PITCH;
     config.target_min_deg = 0; config.target_limit_deg = 180;
@@ -264,7 +277,7 @@ int main(void)
         Control_DefaultConfig(&config);
         config.axis = CONTROL_AXIS_PITCH; config.direction = -1;
         config.target_min_deg = 0; config.target_limit_deg = 180;
-        config.kp = config.kd = 0; config.ki = APP_HOLD_KI;
+        config.kp = config.kd = 0; config.ki = 0.8f; /* Keep nonlinear function tests nonzero. */
         config.integral_error_scale_deg = APP_HOLD_INTEGRAL_ERROR_SCALE_DEG;
         config.deadband_deg = APP_HOLD_DEADBAND_DEG;
         for (index = 0; index < sizeof(errors)/sizeof(errors[0]); ++index) {

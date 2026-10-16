@@ -1,6 +1,6 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
-2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前试验版`v0.6.1-nonlinear-i08-test`保留Kp1.6，仅将变速积分峰值从2降至0.8，公式Ki_eff=0.8/[1+(e/8)²]。上一版静止左右抽动，尚未通过验收。保留OLED、分析工具及保护，IMU_INVALID仍未解决。版本见[VERSIONS](docs/VERSIONS.md)，步骤和曲线见[减弱积分测试](docs/NONLINEAR_I08_TEST.md)。
+2026-10-16：稳定基线为Git标签`v0.1.0-stable`；当前`v0.6.2-ki0-diagnostic`仅关闭积分，保留Kp1.6/Kd0.02，用于定位静止左右摆动，不作为完整定角性能版。OLED、分析工具及保护保留，IMU_INVALID仍未解决。版本见[VERSIONS](docs/VERSIONS.md)，当前步骤见[Ki0静止对照](docs/KI0_DIAGNOSTIC_TEST.md)。
 
 当前进度、最新固件验证状态见[当前进度与下次继续](docs/当前进度与下次继续.md)。当前已恢复题目要求的完整PID与0～180°目标/输出范围，取消开启位置±15°诊断限制；[操作与实物测试](docs/HOLD_EXAM_TEST.md)。IMU安装映射为机构(X,Y,Z)=芯片(X,Z,-Y)，控制机构Pitch；新固件下载和实物反馈方向、精度、扰动恢复验证待完成。
 
