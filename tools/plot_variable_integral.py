@@ -28,14 +28,14 @@ def main():
     deadband = value("APP_HOLD_DEADBAND_DEG")
     errors = [i / 100 for i in range(3001)]
     gains = [minimum + (ki - minimum) * e*e / (e*e + scale*scale) for e in errors]
-    old_gains = [0.5 / (1 + (e / 8) ** 2) for e in errors]
+    old_gains = [0.4 + 0.6 * e*e / (e*e + 16) for e in errors]
     increments = [g * e * 0.02 if e > deadband else 0 for e, g in zip(errors, gains)]
     old = [g * e * 0.02 if e > deadband else 0 for e, g in zip(errors, old_gains)]
     plt.rcParams.update({"font.family": "Microsoft YaHei", "axes.unicode_minus": False,
                          "font.size": 11, "svg.fonttype": "path"})
     fig, axes = plt.subplots(2, 1, figsize=(10, 8), layout="constrained")
     axes[0].plot(errors, gains, color="#1764ab", lw=2.5, label="新版有效 Ki")
-    axes[0].plot(errors, old_gains, color="#a96515", ls="--", label="上一版 Ki = 0.5 / [1 + (e/8)²]")
+    axes[0].plot(errors, old_gains, color="#a96515", ls="--", label="v0.7.0：积分下限 0.4、上限 1.0")
     axes[0].axhline(minimum, color="#999", ls=":", lw=1)
     axes[0].set(ylabel="有效积分增益 Ki（1/s）", ylim=(0, ki * 1.12))
     axes[1].plot(errors, increments, color="#1764ab", lw=2.5, label="新版积分增量绝对值")

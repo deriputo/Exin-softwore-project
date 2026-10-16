@@ -17,7 +17,7 @@
 #define APP_HOLD_NORMAL_KP 1.0f
 /* Ki_eff = min + (max-min) * e^2/(e^2+scale^2). */
 #define APP_HOLD_NORMAL_KI 1.0f
-#define APP_HOLD_INTEGRAL_MIN_KI 0.4f
+#define APP_HOLD_INTEGRAL_MIN_KI 0.8f
 #define APP_HOLD_INTEGRAL_ERROR_SCALE_DEG 4.0f
 /* Keep derivative disabled during integral reintroduction. */
 #define APP_HOLD_NORMAL_KD 0.0f

@@ -17,7 +17,7 @@ static ControlSample Sample(float roll, float pitch, uint32_t now)
 /* Same 8deg base step and first-order actuator for old/new tuning. This tests
    relative recovery and safety; it does not predict real SG90 settling time. */
 static uint32_t RecoveryProfileMs(float kp, float ki, float slew, float scale,
-                                 float base_step, uint8_t legacy_decay)
+                                 float base_step, uint8_t legacy_decay, float minimum_ki)
 {
     Control control;
     ControlConfig config;
@@ -31,7 +31,7 @@ static uint32_t RecoveryProfileMs(float kp, float ki, float slew, float scale,
     config.integral_limit_deg = 180;
     config.kp = kp; config.ki = ki; config.kd = APP_HOLD_KD;
     config.integral_error_scale_deg = scale;
-    config.integral_min_ki = scale > 0.0f ? APP_HOLD_INTEGRAL_MIN_KI : 0.0f;
+    config.integral_min_ki = scale > 0.0f ? minimum_ki : 0.0f;
     config.deadband_deg = APP_HOLD_DEADBAND_DEG;
     config.slew_deg_per_second = slew;
     Control_Init(&control, &config, 0);
@@ -64,7 +64,7 @@ static uint32_t RecoveryProfileMs(float kp, float ki, float slew, float scale,
 
 static uint32_t RecoveryWithScaleMs(float kp, float ki, float slew, float scale)
 {
-    return RecoveryProfileMs(kp, ki, slew, scale, 8.0f, 0);
+    return RecoveryProfileMs(kp, ki, slew, scale, 8.0f, 0, APP_HOLD_INTEGRAL_MIN_KI);
 }
 
 static uint32_t RecoveryMs(float kp, float ki, float slew)
@@ -261,13 +261,16 @@ int main(void)
         const float steps[] = {-30, -8, 8, 30};
         unsigned int index;
         for (index = 0; index < sizeof(steps)/sizeof(steps[0]); ++index) {
-            uint32_t old_ms = RecoveryProfileMs(1.0f, 0.5f, 180.0f, 0, steps[index], 1);
+            uint32_t old_ms = RecoveryProfileMs(1.0f, 0.5f, 180.0f, 0, steps[index], 1, 0);
+            uint32_t previous_ms = RecoveryProfileMs(1.0f, 1.0f, 180.0f, 4.0f, steps[index], 0, 0.4f);
             uint32_t new_ms = RecoveryProfileMs(APP_HOLD_KP, APP_HOLD_KI,
-                APP_HOLD_SLEW_DEG_PER_SECOND, APP_HOLD_INTEGRAL_ERROR_SCALE_DEG, steps[index], 0);
+                APP_HOLD_SLEW_DEG_PER_SECOND, APP_HOLD_INTEGRAL_ERROR_SCALE_DEG, steps[index], 0,
+                APP_HOLD_INTEGRAL_MIN_KI);
             assert(new_ms < 20000u);
             assert(new_ms < old_ms);
-            printf("Base step %.0fdeg: previous decay=%lu ms, bounded I=%lu ms (incl 1s dwell)\n",
-                (double)steps[index], (unsigned long)old_ms, (unsigned long)new_ms);
+            assert(new_ms < previous_ms);
+            printf("Base step %.0fdeg: floor0.4=%lu ms, floor0.8=%lu ms (incl 1s dwell)\n",
+                (double)steps[index], (unsigned long)previous_ms, (unsigned long)new_ms);
         }
     }
     {
