@@ -15,7 +15,8 @@
 /* Exam mode: full travel PID. Optional commissioning preset stays disabled. */
 #define APP_HOLD_DIAGNOSTIC 0
 #define APP_HOLD_NORMAL_KP 0.8f
-#define APP_HOLD_NORMAL_KI 0.25f
+/* Single-variable trial: faster removal of residual base-tilt error. */
+#define APP_HOLD_NORMAL_KI 0.50f
 #define APP_HOLD_NORMAL_KD 0.02f
 #if APP_HOLD_DIAGNOSTIC
 #define APP_HOLD_KP 0.5f

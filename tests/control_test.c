@@ -230,10 +230,10 @@ int main(void)
         }
     }
     {
-        uint32_t baseline_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI, 90.0f);
+        uint32_t baseline_ms = RecoveryMs(APP_HOLD_KP, 0.25f, APP_HOLD_SLEW_DEG_PER_SECOND);
         uint32_t normal_ms = RecoveryMs(APP_HOLD_KP, APP_HOLD_KI, APP_HOLD_SLEW_DEG_PER_SECOND);
-        assert(normal_ms < 20000u);
-        printf("Simulated 8deg base-step recovery: slew90=%lu ms, slew180=%lu ms\n",
+        assert(normal_ms < baseline_ms && normal_ms < 20000u);
+        printf("Simulated 8deg base-step recovery (includes 1s dwell): Ki0.25=%lu ms, trialKi=%lu ms\n",
                (unsigned long)baseline_ms, (unsigned long)normal_ms);
     }
     Control_DefaultConfig(&config); config.axis = CONTROL_AXIS_PITCH;
