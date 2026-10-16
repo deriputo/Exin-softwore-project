@@ -469,8 +469,10 @@ class MonitorApp:
     def _draw_plot(self):
         canvas = self.canvas
         canvas.delete("all")
-        width, height = max(canvas.winfo_width(), 200), max(canvas.winfo_height(), 70)
-        left, top, right, bottom = 55, 22, width - 18, height - 32
+        scale = self.ui_scale
+        px = lambda value: round(value * scale)
+        width, height = max(canvas.winfo_width(), px(200)), max(canvas.winfo_height(), px(70))
+        left, top, right, bottom = px(55), px(22), width - px(18), height - px(32)
         now = self.chart_time
         start = max(0, now - 10)
         visible = [(t, s) for t, s in self.points if t >= start]
@@ -485,23 +487,24 @@ class MonitorApp:
             y = top + index * (bottom - top) / 4
             value = ymax - index * (ymax - ymin) / 4
             canvas.create_line(left, y, right, y, fill="#ddddd6")
-            canvas.create_text(left - 7, y, text=f"{value:.1f}", anchor="e", fill="#696965", font=("Consolas", 9))
+            canvas.create_text(left - px(7), y, text=f"{value:.1f}", anchor="e", fill="#696965", font=("Consolas", 9))
         for index in range(6):
             x = left + index * (right - left) / 5
             canvas.create_line(x, top, x, bottom, fill="#e6e5df")
-            canvas.create_text(x, bottom + 16, text=f"{start + index * 2:.0f}s", fill="#696965", font=("Consolas", 9))
-        canvas.create_text(10, 8, text="°", anchor="nw", fill="#696965")
+            canvas.create_text(x, bottom + px(16), text=f"{start + index * 2:.0f}s", fill="#696965", font=("Consolas", 9))
+        canvas.create_text(px(10), px(8), text="°", anchor="nw", fill="#696965")
         for label, field, color, legend_x, dash in (("目标", "target", "#191919", 70, (6, 4)),
                 ("实测", "measured", "#d52b1e", 170, ()), ("误差", "error", "#777772", 270, (2, 4))):
-            canvas.create_line(legend_x, 8, legend_x + 22, 8, fill=color, width=2, dash=dash)
-            canvas.create_text(legend_x + 28, 8, text=label, fill=color, anchor="w", font=("Microsoft YaHei UI", 9))
+            dash = tuple(px(value) for value in dash)
+            canvas.create_line(px(legend_x), px(8), px(legend_x + 22), px(8), fill=color, width=px(2), dash=dash)
+            canvas.create_text(px(legend_x + 28), px(8), text=label, fill=color, anchor="w", font=("Microsoft YaHei UI", 9))
             coordinates = [coord for t, sample in visible for coord in xy(t, getattr(sample, field))]
             if len(coordinates) >= 4:
-                canvas.create_line(*coordinates, fill=color, width=2, dash=dash)
+                canvas.create_line(*coordinates, fill=color, width=px(2), dash=dash)
         if not visible:
-            canvas.create_text((left + right) / 2, (top + bottom) / 2 - 12,
+            canvas.create_text((left + right) / 2, (top + bottom) / 2 - px(12),
                                text="等待 TRACE 数据", fill="#696965", font=("Microsoft YaHei UI", 14))
-            canvas.create_text((left + right) / 2, (top + bottom) / 2 + 16,
+            canvas.create_text((left + right) / 2, (top + bottom) / 2 + px(16),
                                text="连接设备后，点击 TRACE ON", fill="#696965", font=("Microsoft YaHei UI", 10))
 
     def _toggle_log(self):
@@ -541,6 +544,8 @@ class MonitorApp:
 
 
 def main():
+    from monitor_dpi import enable_native_dpi
+    enable_native_dpi()
     import tkinter as tk
     root = tk.Tk()
     MonitorApp(root)

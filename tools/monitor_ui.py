@@ -8,9 +8,13 @@ LINE = "#d8d7d1"
 
 
 def build(app):
+    from monitor_dpi import dpi_scale, scale_pixels
     tk, ttk, root = app.tk, app.ttk, app.root
-    root.geometry("1320x940")
-    root.minsize(1100, 820)
+    app.ui_scale = scale = dpi_scale(root)
+    available_w = max(640, root.winfo_screenwidth() - round(40 * scale))
+    available_h = max(480, root.winfo_screenheight() - round(80 * scale))
+    root.geometry(f"{min(round(1320 * scale), available_w)}x{min(round(940 * scale), available_h)}")
+    root.minsize(min(round(1100 * scale), available_w), min(round(820 * scale), available_h))
     root.configure(background=PAPER)
     style = ttk.Style(root)
     style.theme_use("clam")
@@ -227,3 +231,8 @@ def build(app):
     main.rowconfigure(3, weight=1)
     ttk.Label(container, text="e芯 / ENGINEERING CONSOLE     ·     USB 50 Hz  /  BLE 5 Hz     ·     CSV 带电脑接收时间",
               style="Muted.TLabel").grid(row=5, column=0, sticky="w", pady=(12, 0))
+    scale_pixels(root, scale)
+    for name, padding in (("TButton", (10, 7)), ("Compact.TButton", (8, 2))):
+        style.configure(name, padding=tuple(round(v * scale) for v in padding))
+    for name in ("TEntry", "TCombobox", "TSpinbox"):
+        style.configure(name, padding=round(5 * scale), arrowsize=round(13 * scale))

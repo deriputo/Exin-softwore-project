@@ -6,6 +6,8 @@ import tkinter as tk
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from pc_monitor import MonitorApp
+from monitor_dpi import enable_native_dpi
+enable_native_dpi()
 
 
 class OfflineApp(MonitorApp):
@@ -20,6 +22,9 @@ class MonitorUiTest(unittest.TestCase):
         self.app = OfflineApp(self.root)
 
     def tearDown(self):
+        self.root.update_idletasks()
+        for callback in self.root.tk.call("after", "info"):
+            self.root.after_cancel(callback)
         self.root.destroy()
 
     def test_minimum_ble_layout_and_transport_lock(self):
