@@ -2,6 +2,7 @@
 #include "app_config.h"
 #include <assert.h>
 #include <stdio.h>
+#include <math.h>
 
 static float Abs(float x) { return x < 0 ? -x : x; }
 static float StepCorrection(void)
@@ -38,6 +39,33 @@ static ControlConfig Config(ControlMode mode)
 }
 
 typedef struct { uint32_t entry_ms; float overshoot, tail_error; } Result;
+
+/* Continuous +/-10deg base motion, including independently delayed sensing.
+   True attitude, not delayed telemetry, is used to score tracking. */
+static float Tracking(ControlConfig cfg, float tau, unsigned int delay, float period)
+{
+    Control c; ControlSample sample;
+    float shaft = 90, measurements[64], sum = 0, previous = 90;
+    unsigned int n, count = 0; uint32_t now;
+    for (n = 0; n < 64; ++n) measurements[n] = 90;
+    Control_Init(&c, &cfg, 0); sample = Sample(90, 0);
+    assert(Control_StartHold(&c, &sample, 0) == CONTROL_OK);
+    for (now = 20; now <= 20000; now += 20) {
+        float base = now < 1000 ? 0 : 10 * sinf(6.2831853f * (now - 1000) / 1000 / period);
+        float y; unsigned int index = (now / 20) % 64;
+        shaft += .02f / (tau + .02f) * (c.state.output_angle_deg - shaft);
+        y = 90 + base + APP_HOLD_DIRECTION * (shaft - 90);
+        measurements[index] = y;
+        sample = Sample(measurements[(index + 64 - delay) % 64], now);
+        (void)Control_Update(&c, &sample, now);
+        assert(c.state.fault == CONTROL_FAULT_NONE);
+        assert(c.state.output_angle_deg >= 0 && c.state.output_angle_deg <= 180);
+        assert(Abs(c.state.output_angle_deg - previous) <= 3.601f);
+        previous = c.state.output_angle_deg;
+        if (now >= 4000) { sum += (y - 90) * (y - 90); ++count; }
+    }
+    return sqrtf(sum / count);
+}
 
 /* Independent physical actuator and delayed sensor; estimates never read this
    model's shaft position. Includes mismatch in lag, delay and mechanical gain. */
@@ -101,7 +129,8 @@ int main(void)
     s = Sample(90, 20); assert(Control_Update(&c, &s, 20) == retained);
     s = Sample(85, 40); (void)Control_Update(&c, &s, 40);
     assert(Abs(c.state.output_angle_deg - (130 - StepCorrection())) < 0.001f);
-    assert(c.state.i_term == 0 && c.state.d_term == APP_DIRECT_RATE_LIMIT_DEG);
+    assert(c.state.i_term == 0 && c.state.d_term > 0);
+    assert(Abs(c.state.d_term - APP_DIRECT_RATE_GAIN_SECONDS * 5 / .07f) < .001f);
     assert(Control_StartHold(&c, &s, 40) == CONTROL_OK);
     assert(c.state.target_deg == 90 && c.bias_angle_deg == 130);
     estimate = c.estimated_actuator_deg;
@@ -162,6 +191,9 @@ int main(void)
     s.roll_deg = 85; s.timestamp_ms = 4;
     (void)Control_Update(&c, &s, 4);
     assert(Abs(c.state.output_angle_deg - (90 + StepCorrection())) < 0.001f);
+    s.roll_deg = 0; s.timestamp_ms = 24;
+    (void)Control_Update(&c, &s, 24);
+    assert(c.state.d_term == APP_DIRECT_RATE_LIMIT_DEG); /* Large rate is capped. */
 
     /* Compare identical reference plants against the preserved PI profile. */
     {
@@ -211,7 +243,26 @@ int main(void)
         }
         printf("DIRECT mismatch %u cases: worst entry=%lu ms; worst overshoot=%.2fdeg\n",
             count, (unsigned long)slowest, (double)worst_overshoot);
-        assert(worst_overshoot < 1.5f);
+        assert(worst_overshoot <= 2.0f); /* User-approved transient overshoot ceiling. */
+    }
+    {
+        const float taus[] = {.06f, .12f, .24f};
+        const float periods[] = {2, 4};
+        unsigned int a, b, delay;
+        ControlConfig old = Config(CONTROL_MODE_DIRECT);
+        old.direct_position_gain = .30f;
+        old.actuator_time_constant_seconds = .12f;
+        old.direct_rate_gain_seconds = .06f;
+        old.direct_rate_limit_deg = 3;
+        cfg = Config(CONTROL_MODE_DIRECT);
+        for (a = 0; a < 3; ++a) for (b = 0; b < 2; ++b)
+        for (delay = 0; delay <= 3; delay += 3) {
+            float before = Tracking(old, taus[a], delay, periods[b]);
+            float after = Tracking(cfg, taus[a], delay, periods[b]);
+            printf("Continuous tau=%.2f delay=%u period=%.0f: RMS old=%.3f new=%.3f deg\n",
+                (double)taus[a], delay * 20, (double)periods[b], (double)before, (double)after);
+            assert(after < before);
+        }
     }
     puts("PASS: DIRECT model, deadband retention, repeated samples, noise, rails, reversal, faults, axis and rollover");
     return 0;

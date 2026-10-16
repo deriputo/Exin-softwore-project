@@ -1,5 +1,9 @@
 # 可选 Python 上位机
 
+当前待测为 **v0.9.1-tracking-2deg-test**：用户批准2°短暂过冲上限；位置系数0.30不变，估计时间常数0.10秒、速度贡献限幅6°。288组模型最坏过冲1.88°，12组连续跟踪模型均改善，但仍未达到紧贴目标。Keil编译烧录及实物验收由用户执行。详见docs/DIRECT_TRACKING_TEST.md。
+
+以下为历史版本说明。
+
 当前DIRECT+试验：TRACE P为位置项，I=0，D为受限速度反馈（±3°，到位死区内为0）。CSV格式不变，servo仍为指令值。以下I/D均为0的描述仅适用于v0.8.0。测试见../docs/DIRECT_RATE_TEST.md。
 
 DIRECT试验模式保持CSV字段兼容。此模式P列为候选姿态误差位置补偿（非原PI的Kp项），I/D为0；target/measured/error/servo等含义不变。没有实际舵机轴角反馈，servo仍是指令。算法判别请看板端HOLD Y DIRECT标识，详见docs/DIRECT_COMPENSATION_TEST.md。
