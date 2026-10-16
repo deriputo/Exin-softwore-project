@@ -52,6 +52,7 @@ int main(void)
         cfg.use_rate_sample = 1; cfg.rate_filter_seconds = APP_RATE_FILTER_SECONDS;
         cfg.rate_term_limit_deg = APP_RATE_TERM_LIMIT_DEG; cfg.rate_quiet_dps = APP_RATE_QUIET_DPS;
         cfg.deadband_deg = APP_HOLD_DEADBAND_DEG; cfg.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
+        cfg.deadband_transition_deg = APP_HOLD_DEADBAND_TRANSITION_DEG;
         Control_Init(&c, &cfg, now); s = Input(&measured);
         assert(Control_StartHold(&c, &s, now) == CONTROL_OK);
         imu.tilt_pitch = .7f; /* Estimation residual, physical mechanism is level. */

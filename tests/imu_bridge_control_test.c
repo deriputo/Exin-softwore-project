@@ -42,6 +42,7 @@ int main(void)
     cfg.direction = APP_HOLD_DIRECTION; cfg.target_min_deg = 0; cfg.target_limit_deg = 180;
     cfg.kp = APP_POSITION_PID_KP; cfg.ki = APP_POSITION_PID_KI; cfg.kd = APP_POSITION_PID_KD;
     cfg.deadband_deg = APP_HOLD_DEADBAND_DEG; cfg.integral_limit_deg = 180;
+    cfg.deadband_transition_deg = APP_HOLD_DEADBAND_TRANSITION_DEG;
     cfg.slew_deg_per_second = APP_HOLD_SLEW_DEG_PER_SECOND;
 #if APP_RATE_PID_TEST
     cfg.ki = APP_RATE_PID_KI; cfg.kd = APP_RATE_PID_KD; cfg.use_rate_sample = 1;

@@ -1,5 +1,7 @@
 # 单轴 IMU 姿态定角
 
+v0.14.0新增PID死区平滑试验：deadband_transition_deg默认0兼容旧硬死区，应用设0.3°，0.5～0.8°误差使用三次smoothstep权重接入P/I；≥0.8°恢复原误差，D输入和保护不变。UI HOLD Y SOFT。此项针对边缘回调，有限模型存在少量尾段时间代价，实物未验收，详见../../docs/SMOOTH_DEADBAND_TEST.md。以下RATE说明为沿用的基础算法。
+
 当前试验版v0.12.0-gyro-rate-response-test，OLED为HOLD Y RATE：P0.7、Ki8、D系数0.005，直接使用校准后的传感器Z轴角速度，速度贡献±0.5°，静止小噪声抑制。六项主机检查通过，未实物验收；100ms陀螺仪接续和保护保留。连续跟踪模型改善约17～22%，原wide延迟模型仍不合格，不能保证实物实时跟随。上一版v0.11.1及慢速验收版v0.10.1独立保存。 [当前参数、输入契约和验证](../../docs/GYRO_RATE_RESPONSE_TEST.md)。启用use_rate_sample时，ControlSample必须提供同一采样时刻、相同控制轴符号的angular_rate_dps和angular_rate_valid；旧角差分路径默认保留。
 
 该模块不访问硬件；应用传入 IMU 的校准后 Roll/Pitch 与采样时间，取得 PWM 脉宽后调用 `ServoPWM_SetPulseUs()`。每个 `Control` 实例独立。`ControlSample.valid` 必须表示传感器已连接、完成静止校准并取得可靠姿态，不能仅表示 I²C 读取成功。

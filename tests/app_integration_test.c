@@ -512,7 +512,7 @@ int main(void)
         uint16_t first;
         Reset(); Turn(3); Key(KEY_ID_1, 0);
         Feed("SERVO HOLD ON\n"); Until(at + 100u);
-        assert(strstr(screen, APP_RATE_PID_TEST ? (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE") : "HOLD Y PIDR3"));
+        assert(strstr(screen, APP_RATE_PID_TEST ? (APP_HOLD_DEADBAND_TRANSITION_DEG > 0 ? "HOLD Y SOFT" : (IMU_SETTLE_ENABLE ? "HOLD Y SETTLE" : "HOLD Y RATE")) : "HOLD Y PIDR3"));
         pose = 2; Until(at + 40u); first = pulse;
         assert(first > 1515u && first < 1535u);
         Until(at + 500u);
@@ -525,6 +525,12 @@ int main(void)
         assert(pulse < first - 100u); /* Large error cannot freeze I at the slew threshold. */
     }
     if (APP_RATE_PID_TEST) {
+        Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
+        pose = .51f; Until(at + 20u); assert(pulse == 1500u);
+        pose = .49f; Until(at + 20u); assert(pulse == 1500u);
+        pose = -.51f; Until(at + 20u); assert(pulse == 1500u);
+        /* Application must actually apply the soft boundary, not just expose
+           a SOFT title while leaving the default hard controller active. */
         Reset(); Feed("SERVO HOLD ON\n"); Until(at + 100u);
         imu_gz = 100; Until(at + 20u);
         assert(pulse == 1506u); /* Positive sensor Z = mechanism Pitch rate; P/I remain zero. */

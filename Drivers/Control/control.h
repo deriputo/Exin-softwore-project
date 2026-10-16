@@ -36,6 +36,7 @@ typedef struct {
     float integral_error_scale_deg; /* 0: constant Ki; >0: bounded gain scheduling. */
     float integral_min_ki; /* Gain near zero error, 0 <= min <= ki (upper gain). */
     float deadband_deg;
+    float deadband_transition_deg; /* PID only; 0 keeps legacy hard deadband. */
     float target_limit_deg;
     float target_min_deg;
     float integral_limit_deg;

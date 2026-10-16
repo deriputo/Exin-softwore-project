@@ -1,5 +1,7 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+当前试验版v0.14.0-smooth-deadband-test：OLED显示HOLD Y SOFT。保留0.5°死区，在0.5～0.8°平滑接入P/I，较大误差力度、D和IMU条件不变；23项主机回归通过，实物抗抖与尾段速度待验收。上一版v0.13.0独立保留。见[本轮测试](docs/SMOOTH_DEADBAND_TEST.md)，下文其他版本为历史记录。
+
 当前试验版v0.13.0-imu-settle-test：OLED显示HOLD Y SETTLE。根据手动测试的尾段姿态回落，新增有静止质量门控、限幅的单轴重力校正加速，PID参数不变；真实效果待用户验证。前版v0.12.3已保留，见[本轮测试](docs/IMU_SETTLE_TEST.md)。下文其他版本为历史记录。
 
 当前为v0.12.3-response-trace20-test诊断版：仅电脑TRACE改为20ms（50Hz），蓝牙仍5Hz；控制参数与RATE相同。本轮450组更强比例/滤波候选未通过筛选，未启用。用户确认的手动阶跃已归档，下一步固定底座采集更细的90→100→90°响应。不是已提速的控制版，见[测试步骤](docs/RESPONSE_TRACE20_TEST.md)。下面v0.12.0为沿用的控制算法说明。

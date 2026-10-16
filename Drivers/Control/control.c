@@ -47,6 +47,7 @@ void Control_DefaultConfig(ControlConfig *config)
     config->integral_error_scale_deg = 0.0f;
     config->integral_min_ki = 0.0f;
     config->deadband_deg = 0.3f;
+    config->deadband_transition_deg = 0.0f;
     config->target_limit_deg = 60.0f;
     config->target_min_deg = -60.0f;
     config->integral_limit_deg = 35.0f;
@@ -83,6 +84,8 @@ static uint8_t ConfigValid(const ControlConfig *config)
         NumberValid(config->integral_min_ki) && config->integral_min_ki >= 0.0f &&
         config->integral_min_ki <= config->ki &&
         NumberValid(config->deadband_deg) && config->deadband_deg >= 0.0f &&
+        NumberValid(config->deadband_transition_deg) && config->deadband_transition_deg >= 0.0f &&
+        config->deadband_transition_deg <= 5.0f &&
         NumberValid(config->target_limit_deg) && config->target_limit_deg > 0.0f &&
         config->target_limit_deg <= 180.0f &&
         NumberValid(config->target_min_deg) && config->target_min_deg >= -180.0f &&
@@ -324,6 +327,11 @@ uint16_t Control_Update(Control *control, const ControlSample *sample, uint32_t 
     control->state.measured_deg = measured;
     control->state.error_deg = error;
     if (Abs(error) <= control->config.deadband_deg) { error = 0.0f; }
+    else if (control->config.deadband_transition_deg > 0.0f) {
+        float weight = Clamp((Abs(error) - control->config.deadband_deg) /
+            control->config.deadband_transition_deg, 0.0f, 1.0f);
+        error *= weight * weight * (3.0f - 2.0f * weight);
+    }
     control->state.p_term = control->config.kp * error;
     /* Derivative on measurement avoids a kick when target changes. */
     instant_rate = control->config.use_rate_sample ? sample->angular_rate_dps :
