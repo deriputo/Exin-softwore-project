@@ -310,8 +310,25 @@ int main(void)
     t = strstr(tx, "OK TIME=12:34:56"); s = strstr(tx, "OK SERVO=120 HOLD=OFF");
     a = strstr(tx, "OK ALARM1=12:34:57 ON"); assert(t && s && a && t < s && s < a);
     assert(pulse == 1833u); Until(2500); assert(RTCClock_GetActiveAlarmMask() == 1u);
-    Key(KEY_ID_1, 0); assert(!RTCClock_GetActiveAlarmMask() && Page() == UI_MAIN && rtc_model.alarms[0].enabled);
-    rtc_model.active_mask = 1u; Key(KEY_ID_2, 1); assert(!RTCClock_GetActiveAlarmMask() && Page() == UI_MAIN);
+    Key(KEY_ID_1, 0); Key(KEY_ID_2, 1);
+    assert(RTCClock_GetActiveAlarmMask() == 1u && Page() == UI_MAIN); /* No overlap: still ringing. */
+    Edge(KEY_ID_1, KEY_EVENT_PRESS, KEY1_MASK);
+    assert(RTCClock_GetActiveAlarmMask() == 1u);
+    Until(at + 1100u); Edge(KEY_ID_1, KEY_EVENT_LONG, KEY1_MASK);
+    assert(RTCClock_GetActiveAlarmMask() == 1u && Page() == UI_MAIN);
+    Edge(KEY_ID_2, KEY_EVENT_PRESS, KEY1_MASK | KEY2_MASK);
+    assert(!RTCClock_GetActiveAlarmMask() && rtc_model.alarms[0].enabled);
+    Edge(KEY_ID_1, KEY_EVENT_RELEASE, KEY2_MASK);
+    Edge(KEY_ID_2, KEY_EVENT_SHORT, 0); Edge(KEY_ID_2, KEY_EVENT_RELEASE, 0);
+    assert(Page() == UI_MAIN);
+    rtc_model.active_mask = 1u;
+    Edge(KEY_ID_2, KEY_EVENT_PRESS, KEY2_MASK);
+    assert(RTCClock_GetActiveAlarmMask() == 1u);
+    Edge(KEY_ID_1, KEY_EVENT_PRESS, KEY1_MASK | KEY2_MASK);
+    assert(!RTCClock_GetActiveAlarmMask());
+    Edge(KEY_ID_2, KEY_EVENT_SHORT, KEY1_MASK); Edge(KEY_ID_2, KEY_EVENT_RELEASE, KEY1_MASK);
+    Edge(KEY_ID_1, KEY_EVENT_SHORT, 0); Edge(KEY_ID_1, KEY_EVENT_RELEASE, 0);
+    assert(Page() == UI_MAIN);
     Key(KEY_ID_1, 0); assert(Page() == UI_TIME);
     assert(RTCClock_GetTime(&time) == RTC_CLOCK_OK);
     Turn(1); Key(KEY_ID_2, 1); Until(at + 50u);
@@ -326,10 +343,19 @@ int main(void)
     Reset(); Key(KEY_ID_1, 0); Key(KEY_ID_1, 0); Key(KEY_ID_1, 0); Key(KEY_ID_1, 0);
     retained = pulse; Turn(10); rtc_model.active_mask = 1u;
     Edge(KEY_ID_1, KEY_EVENT_PRESS, KEY1_MASK);
+    assert(RTCClock_GetActiveAlarmMask() == 1u);
     Edge(KEY_ID_2, KEY_EVENT_PRESS, KEY1_MASK | KEY2_MASK);
+    assert(!RTCClock_GetActiveAlarmMask());
     Edge(KEY_ID_1, KEY_EVENT_SHORT, KEY2_MASK); Edge(KEY_ID_1, KEY_EVENT_RELEASE, KEY2_MASK);
     Edge(KEY_ID_2, KEY_EVENT_SHORT, 0); Edge(KEY_ID_2, KEY_EVENT_RELEASE, 0);
     assert(Page() == UI_SERVO && pulse == retained); /* Chord debounce skew must not confirm draft. */
+
+    /* Alarm may start with both keys already held, without a new PRESS event. */
+    rtc_model.active_mask = 3u; pressed = KEY1_MASK | KEY2_MASK; Step();
+    assert(!RTCClock_GetActiveAlarmMask());
+    Edge(KEY_ID_1, KEY_EVENT_SHORT, KEY2_MASK); Edge(KEY_ID_1, KEY_EVENT_RELEASE, KEY2_MASK);
+    Edge(KEY_ID_2, KEY_EVENT_SHORT, 0); Edge(KEY_ID_2, KEY_EVENT_RELEASE, 0);
+    assert(Page() == UI_SERVO && pulse == retained);
 
     Reset(); Until(61295); assert(!Power_IsIdle()); Step(); assert(Power_IsIdle() && !display_power && App_CanSleep());
     ++encoder; Step(); touch = at; assert(!Power_IsIdle() && display_power); /* Partial encoder edge counts as activity. */

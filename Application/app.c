@@ -218,6 +218,14 @@ static void Keys(void)
 {
     KeyEvent event;
     uint8_t mask;
+    /* Use the debounced level, not matching PRESS timestamps: one key may be
+       held before the other, and both may already be down when the alarm fires. */
+    if (RTCClock_GetActiveAlarmMask() &&
+        (Key_GetPressedMask() & (KEY1_MASK | KEY2_MASK)) == (KEY1_MASK | KEY2_MASK)) {
+        RTCClock_AcknowledgeAlarm();
+        consumed_keys |= (KEY1_MASK | KEY2_MASK);
+        Notice("ALARM STOPPED");
+    }
     while (Key_GetEvent(&event)) {
         mask = (uint8_t)(1u << (unsigned int)event.key);
         /* Capture idle before Touch clears it. Consume the entire wake gesture,
@@ -227,9 +235,8 @@ static void Keys(void)
         }
         Power_Touch(now);
         if (RTCClock_GetActiveAlarmMask()) {
-            RTCClock_AcknowledgeAlarm();
+            /* Single-key gestures while ringing neither dismiss nor edit UI. */
             consumed_keys |= (uint8_t)(Key_GetPressedMask() | mask);
-            Notice("ALARM STOPPED");
         }
         /* A second key may finish debouncing one scan after the first. Consume
            that overlapping press too, so a two-key acknowledgement cannot
@@ -544,7 +551,7 @@ static void Render(void)
     if (RTCClock_GetActiveAlarmMask()) {
         OLED_FillRect(0, 45, 128, 19, true);
         OLED_FillRect(1, 46, 126, 17, false);
-        Text(4, 47, "ALARM! ANY KEY"); Text(4, 56, "PRESS TO STOP");
+        Text(4, 47, "ALARM! K1 + K2"); Text(4, 56, "BOTH TO STOP");
     } else if ((int32_t)(notice_until - now) > 0) {
         OLED_FillRect(0, 55, 128, 9, false); Text(0, 56, "%s", notice);
     }
