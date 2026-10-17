@@ -1,5 +1,7 @@
 # e 芯考核：STM32 多功能时钟与舵机控制
 
+当前诊断版`v0.20.0-reset-diagnostics-test`：新增只读`SYS RESET ?`，启动先保存RCC_CSR再清硬件标志，回复各复位标志、运行毫秒、当前按键/报警状态。保留双键消警和控制算法，需用户Keil Rebuild烧录。此版采集按键疑似复位证据，根因尚未确认，见[诊断步骤](docs/RESET_DIAGNOSTICS_TEST.md)。
+
 当前固件改进版`v0.19.0-alarm-two-key`：闹钟仅在K1与K2消抖后同时按下时消警，支持先按住任意一键再按另一键；单键不消警，报警期间按键不操作菜单。OLED提示K1 + K2，需Keil重新编译烧录。上位机保持v0.18.1高清界面，定角算法未修改。见[双键消警验收](docs/ALARM_TWO_KEY_TEST.md)。
 
 当前上位机`v0.18.1-pc-hidpi`：在瑞士风格界面上新增Windows系统DPI原生绘制和像素布局适配，减少缩放模糊。请关闭旧窗口后重开；串口/蓝牙和固件不变。见[高清适配说明](docs/PC_HIDPI.md)。

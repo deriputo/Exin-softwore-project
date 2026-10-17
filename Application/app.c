@@ -31,6 +31,15 @@ static uint8_t boot_started, boot_done, trace_on, ui_time_pending;
 static uint8_t consumed_keys, alarm_previous, sleep_previous, restore_checked;
 static uint8_t standby_bus_suspended;
 static char notice[22];
+/* Kept across App_Init, but ordinary .bss initialization clears this on reset. */
+static uint32_t boot_rcc_csr;
+static uint8_t boot_reset_captured;
+
+void App_CaptureResetFlags(uint32_t rcc_csr)
+{
+    boot_rcc_csr = rcc_csr;
+    boot_reset_captured = 1;
+}
 
 typedef struct {
     IMUSample imu;
@@ -281,7 +290,23 @@ static ProtocolHandlerResult Command(const ProtocolCommand *cmd, uint8_t first,
         (void)snprintf(reply, cap,
             "HELP/help\r\nTIME(hh:mm:ss)\r\nALARMn(hh:mm:ss) n=1..3\r\n"
             "ALARMn OFF|DEL\r\nALARM ?\r\nIMU ?\r\nSERVO ?\r\n"
-            "SERVO SET <0..180>\r\nSERVO HOLD ON|OFF|?\r\nSERVO TRACE ON|OFF|?\r\nIMU RAW ?\r\nIMU FAULT ?\r\n");
+            "SERVO SET <0..180>\r\nSERVO HOLD ON|OFF|?\r\nSERVO TRACE ON|OFF|?\r\nIMU RAW ?\r\nIMU FAULT ?\r\nSYS RESET ?\r\n");
+        break;
+    case PROTOCOL_CMD_SYS_RESET_QUERY:
+        /* RM0008 RCC_CSR bits 26..31. Report every flag, not an inferred cause.
+           STM32F103 PORRSTF combines power-on / power-down reset (no BOR flag). */
+        (void)snprintf(reply, cap,
+            "SYS RESET CSR=0x%08lX CAPTURED=%u PIN=%u POR_PDR=%u SOFT=%u "
+            "IWDG=%u WWDG=%u LPWR=%u UPTIME_MS=%lu KEYS=%u ALARM=%u\r\n",
+            (unsigned long)boot_rcc_csr, (unsigned int)boot_reset_captured,
+            (unsigned int)((boot_rcc_csr >> 26) & 1u),
+            (unsigned int)((boot_rcc_csr >> 27) & 1u),
+            (unsigned int)((boot_rcc_csr >> 28) & 1u),
+            (unsigned int)((boot_rcc_csr >> 29) & 1u),
+            (unsigned int)((boot_rcc_csr >> 30) & 1u),
+            (unsigned int)((boot_rcc_csr >> 31) & 1u),
+            (unsigned long)at, (unsigned int)Key_GetPressedMask(),
+            (unsigned int)RTCClock_GetActiveAlarmMask());
         break;
     case PROTOCOL_CMD_TIME_SET:
         if (first) {

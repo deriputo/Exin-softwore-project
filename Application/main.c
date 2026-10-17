@@ -9,9 +9,12 @@
 #include "power.h"
 #include "rtc_clock.h"
 #include "app.h"
+#include "stm32f10x_rcc.h"
 
 int main(void)
 {
+    App_CaptureResetFlags(RCC->CSR);
+    RCC_ClearFlag(); /* Snapshot first; prevent old causes accumulating on next reset. */
     RTCClock_InitAlarmLED();
     /* Keep the debug clock available during ordinary Sleep/WFI. */
     DBGMCU->CR |= DBGMCU_CR_DBG_SLEEP;

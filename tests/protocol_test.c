@@ -61,7 +61,7 @@ int main(void)
         "ALARM1(12:34:56)", "ALARM3(00:00:00)", "ALARM2 OFF", "ALARM3 DEL",
         "ALARM ?", "IMU ?", "SERVO ?", "SERVO SET 0", "SERVO SET 180",
         "SERVO HOLD ON", "SERVO HOLD OFF", "SERVO HOLD ?",
-        "SERVO TRACE ON", "SERVO TRACE OFF", "SERVO TRACE ?", "IMU FAULT ?"
+        "SERVO TRACE ON", "SERVO TRACE OFF", "SERVO TRACE ?", "IMU FAULT ?", "SYS RESET ?"
     };
     const char *invalid[] = {
         "", "Help", " HELP", "HELP ", "time(00:00:00)", "TIME(24:00:00)",
@@ -70,7 +70,8 @@ int main(void)
         "ALARM1 ON", "ALARM1 OFF ", "ALARM1(99:00:00)", "IMU?", "SERVO SET -1",
         "SERVO SET 181", "SERVO SET 12x", "SERVO SET 1.0", "SERVO SET +1",
         "SERVO SET 0000", "SERVO HOLD", "SERVO TRACE ONX", "SERVO SET 90;HELP",
-        "IMU FAULT", "IMU FAULT ? ", "imu fault ?"
+        "IMU FAULT", "IMU FAULT ? ", "imu fault ?", "SYS RESET", "SYS RESET ? ",
+        "sys reset ?", "SYS RESET ON"
     };
     for (i = 0; i < sizeof(valid) / sizeof(valid[0]); ++i) { assert(Protocol_Parse(valid[i], &command)); }
     for (i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) { assert(!Protocol_Parse(invalid[i], &command)); }
@@ -78,6 +79,7 @@ int main(void)
     assert(command.alarm_number == 3 && command.hour == 23 && command.minute == 59 && command.second == 58);
     assert(Protocol_Parse("SERVO SET 180", &command) && command.angle_deg == 180);
     assert(Protocol_Parse("IMU FAULT ?", &command) && command.type == PROTOCOL_CMD_IMU_FAULT_QUERY);
+    assert(Protocol_Parse("SYS RESET ?", &command) && command.type == PROTOCOL_CMD_SYS_RESET_QUERY);
 
     memset(&ctx, 0, sizeof(ctx));
     Protocol_Init(&protocol, Handler, Writer, &ctx);

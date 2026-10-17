@@ -28,6 +28,8 @@ uint8_t Protocol_Parse(const char *line, ProtocolCommand *command)
     length = strlen(line);
     if (strcmp(line, "HELP") == 0 || strcmp(line, "help") == 0) {
         command->type = PROTOCOL_CMD_HELP;
+    } else if (strcmp(line, "SYS RESET ?") == 0) {
+        command->type = PROTOCOL_CMD_SYS_RESET_QUERY;
     } else if (length >= 4u && strncmp(line, "TIME", 4) == 0 && ParseTime(line + 4, command)) {
         command->type = PROTOCOL_CMD_TIME_SET;
     } else if (strcmp(line, "ALARM ?") == 0) {
