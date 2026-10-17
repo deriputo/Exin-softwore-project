@@ -5,6 +5,7 @@ Keil入口：`Project/eXin.uvprojx`。
 
 | Git标签 | 含义 | 实物状态 |
 |---|---|---|
+| `v0.21.0-boot-led-active-low` | 移除SYS RESET诊断，保留双键消警；开机LED正极经电阻接3.3V、负极PA6，低有效呼吸约3秒后灭 | app_integration、protocol、pwm_core通过；需用户重新编译烧录验收 |
 | `v0.20.0-reset-diagnostics-test` | 启动保存/清除RCC复位标志，SYS RESET ?查询原始CSR、各标志、运行时间及按键/报警状态 | 应用集成与协议主机测试通过；用于按键疑似复位定位，未修复/定性根因，待用户烧录复现 |
 | `v0.19.0-alarm-two-key` | 闹钟仅双键重叠按下消警，支持先后按住；单键不消警且不操作UI，OLED同步提示 | app_integration、key_core、rtc_core通过；待用户Keil编译烧录及实物验收 |
 | `v0.18.1-pc-hidpi` | 创建窗口前启用系统DPI感知，同步缩放布局/图表像素几何，减少Windows整体放大模糊 | 13项电脑端检查通过；需关闭旧进程重开，无需烧录 |

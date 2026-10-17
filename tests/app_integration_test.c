@@ -269,8 +269,6 @@ int main(void)
 {
     uint16_t retained; uint32_t touch, calls; unsigned int traces;
     RTCClockTime time; const char *t, *s, *a;
-    Reset(); Feed("SYS RESET ?\n"); Until(at + 50u);
-    assert(strstr(tx, "CAPTURED=0") && strstr(tx, "UPTIME_MS=") && strstr(tx, "KEYS=0 ALARM=0"));
     Reset(); at = 0; display_ready_at = 5900u; App_Init(0);
     Until(6000); assert(strstr(screen, "STARTING..."));
     Until(7095); assert(strstr(screen, "STARTING..."));
@@ -590,34 +588,6 @@ int main(void)
     Feed("SERVO HOLD ?\nIMU RAW ?\n"); Until(at + 50u);
     assert(strstr(tx, "HOLD=ON FAULT=IMU_INVALID") && strstr(tx, "MODE=ACC REFAGE=0"));
     assert(pulse == retained); /* Sensor recovery never clears the controller latch. */
-    {
-        /* main snapshots once before App_Init; init and queries must retain it.
-           Decode all hardware bits independently, allowing combined causes. */
-        unsigned int bit;
-        char expected[100];
-        for (bit = 0; bit < 6u; ++bit) {
-            App_CaptureResetFlags((uint32_t)1u << (bit + 26u));
-            Reset(); Feed("SYS RESET ?\n"); Until(at + 50u);
-            (void)snprintf(expected, sizeof(expected),
-                "CAPTURED=1 PIN=%u POR_PDR=%u SOFT=%u IWDG=%u WWDG=%u LPWR=%u",
-                (unsigned int)(bit == 0u), (unsigned int)(bit == 1u),
-                (unsigned int)(bit == 2u), (unsigned int)(bit == 3u),
-                (unsigned int)(bit == 4u), (unsigned int)(bit == 5u));
-            assert(strstr(tx, expected));
-            assert(pulse == 1500u && Page() == UI_MAIN && !RTCClock_GetActiveAlarmMask());
-        }
-        App_CaptureResetFlags(0xFC000003u); Reset();
-        rtc_model.active_mask = 1u;
-        Edge(KEY_ID_2, KEY_EVENT_PRESS, KEY2_MASK);
-        Feed("SYS RESET ?\n"); Until(at + 50u);
-        assert(strstr(tx, "CSR=0xFC000003 CAPTURED=1 PIN=1 POR_PDR=1 SOFT=1 IWDG=1 WWDG=1 LPWR=1"));
-        assert(strstr(tx, "KEYS=2 ALARM=1") && RTCClock_GetActiveAlarmMask() == 1u);
-        tx_length = 0; tx[0] = '\0';
-        BluetoothFeed("SYS RESET ?\r\n"); Until(at + 50u);
-        assert(tx_length == 0 && strstr(bt_tx, "CSR=0xFC000003") && strstr(bt_tx, "KEYS=2 ALARM=1"));
-        App_CaptureResetFlags(0); Reset(); Feed("SYS RESET ?\n"); Until(at + 50u);
-        assert(strstr(tx, "CSR=0x00000000 CAPTURED=1 PIN=0 POR_PDR=0 SOFT=0 IWDG=0 WWDG=0 LPWR=0"));
-    }
-    puts("PASS: application/UI, 60s wake gestures, dual UART, reset diagnostics and TRACE; active control profile integration behavior");
+    puts("PASS: application/UI, 60s wake gestures, dual UART and TRACE; active control profile integration behavior");
     return 0;
 }
