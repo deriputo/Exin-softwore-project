@@ -5,6 +5,7 @@ Keil入口：`Project/eXin.uvprojx`。
 
 | Git标签 | 含义 | 实物状态 |
 |---|---|---|
+| `v0.21.1-repository-ready` | GitHub仓库整理：更新README/上位机指南、保留旧说明归档、补全标准库子模块配置、修复测试路径大小写；固件同v0.21.0 | 39项Keil源码路径与文档链接核对通过，上位机10项回归通过；不代表重新完成硬件验收 |
 | `v0.21.0-boot-led-active-low` | 移除SYS RESET诊断，保留双键消警；开机LED正极经电阻接3.3V、负极PA6，低有效呼吸约3秒后灭 | app_integration、protocol、pwm_core通过；需用户重新编译烧录验收 |
 | `v0.20.0-reset-diagnostics-test` | 启动保存/清除RCC复位标志，SYS RESET ?查询原始CSR、各标志、运行时间及按键/报警状态 | 应用集成与协议主机测试通过；用于按键疑似复位定位，未修复/定性根因，待用户烧录复现 |
 | `v0.19.0-alarm-two-key` | 闹钟仅双键重叠按下消警，支持先后按住；单键不消警且不操作UI，OLED同步提示 | app_integration、key_core、rtc_core通过；待用户Keil编译烧录及实物验收 |

@@ -9,7 +9,7 @@ import asyncio
 import queue
 from types import SimpleNamespace
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "Tools" / "pc_monitor.py"
+MODULE_PATH = Path(__file__).resolve().parents[1] / "tools" / "pc_monitor.py"
 SPEC = importlib.util.spec_from_file_location("pc_monitor_under_test", MODULE_PATH)
 monitor = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = monitor

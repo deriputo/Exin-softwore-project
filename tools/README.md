@@ -1,33 +1,31 @@
-# 可选 Python 上位机
+# USB / HC-04 BLE 上位机
 
-当前试验版v0.12.0-gyro-rate-response-test，OLED为HOLD Y RATE：P0.7、Ki8、D系数0.005，直接使用校准后的传感器Z轴角速度，速度贡献±0.5°，静止小噪声抑制。六项主机检查通过，未实物验收；100ms陀螺仪接续和保护保留。连续跟踪模型改善约17～22%，原wide延迟模型仍不合格，不能保证实物实时跟随。上一版v0.11.1及慢速验收版v0.10.1独立保存。 [测试步骤](../docs/GYRO_RATE_RESPONSE_TEST.md)。TRACE格式不变，RATE下D为受限角速度贡献。screen_gyro_rate.py为主机模型筛选工具，不访问串口或硬件。
-
-新增离线分析入口`analyze_trace.py`：读取本工具记录的CSV并导出HTML曲线/JSON指标，不连接串口、不改变固件。[用法和验收](../docs/TRACE_ANALYSIS_TEST.md)。
-
-此工具用于电脑串口控制与姿态闭环演示，属于软件扩展，不是 STM32 固件依赖。不会自动选择、连接串口或发送舵机/TRACE/HOLD 命令。
-
-安装 Python 3.9 或更新版本（带 Tkinter），在工程根目录执行：
+入口`pc_monitor.py`；界面`monitor_ui.py`；DPI适配`monitor_dpi.py`；离线分析`analyze_trace.py`。
+主程序需要Tkinter和requirements.txt内依赖。请用同一个Python安装依赖与启动程序：
 
 ```powershell
-python -m pip install -r Tools/requirements.txt
-python Tools/pc_monitor.py
+python -m pip install -r tools/requirements.txt
+python tools/pc_monitor.py
 ```
 
-1. 选择 USB 转串口实际 COM 号，点击连接。串口固定 115200、8N1，TX/RX 交叉接 PA10/PA9，GND 共地。
-2. 可设置 TIME、三个 ALARM、整数舵机角度，或发送 `HELP`、`IMU ?` 等命令。参数按钮使用固件精确语法；原始命令输入框不偷偷修正大小写或空格。
-3. 点击 HOLD ON 捕获当前姿态；HOLD 打开时固件拒绝手动 SERVO SET。HOLD OFF 关闭控制并清除故障。
-4. 点击 TRACE ON 才开启电脑端 50 Hz 调试数据（v0.12.3起，旧固件20 Hz）；曲线显示目标、实测、误差最近 10 秒，状态行显示输出、饱和、故障。蓝牙仍为5 Hz。
-5. 点击开始记录 CSV 并选择保存路径。记录仅包含有效 TRACE 数据，第一列为电脑实际接收该行的本地时间（含时区），第二列为设备毫秒计数。停止记录会关闭文件。GUI 接收队列满时会显示丢失计数。
+以上在仓库根目录执行。推荐使用根README的独立虚拟环境流程。USB为115200/8N1，BLE是直接GATT连接，不是在COM口列表查找模块。HC-04到MCU的UART保持9600；默认FFE0服务、FFE1收发，UUID可展开配置。
 
-设备调试格式：
+1. 显式选设备并连接，不会自动改变舵机状态。
+2. 点击HELP/IMU ?等查询，设备回复才代表MCU通信链路通了；大于号只表示电脑完成写入。
+3. 点击TRACE ON才显示数据。USB约50Hz，BLE约5Hz。
+4. 点击开始记录CSV选择保存位置，停止后可离线分析。
+5. 关闭HOLD或TRACE需主动发送相应OFF；断开PC连接不会自动停止固件任务。
 
-```text
-H,ms,target,measured,error,P,I,D,servo,saturated,fault
-H,1250,+15.0,+14.6,+0.4,+1.0,+13.3,-0.1,104.2,0,NONE
+```powershell
+python tools/analyze_trace.py 'C:/your/path/trace.csv'
 ```
 
-时间列为 32 位无符号毫秒计数；角度字段为十进制数；饱和为 0/1；故障为大写名称。表头和普通应答只显示在文本窗口，不被当成数据。NaN/Infinity、缺少字段、非法时间等损坏帧不会画图或写 CSV。
+CSV保存电脑接收时间与设备毫秒，字段：received_at, ms, target, measured, error, P, I, D, servo, saturated, fault。
+损坏帧不用于绘图或记录。分析必须结合动作时间，持续转动时的误差不等于停稳后的超调；未同步的视频和CSV不能强行对齐。
 
-打开、关闭及读写串口均在后台线程执行，GUI 不等待通信。命令通过发送队列，接收消息通过有界队列传回。关闭上位机或断开连接不会自动改变舵机状态；需要停止 HOLD/TRACE 时先按相应 OFF 按钮。固件进入 Standby 后普通 USART RX 无法唤醒，应使用硬件定义的唤醒键或 RTC。
+界面为瑞士风格，支持系统DPI绘制；关闭旧进程后重新启动才加载新代码，不保证混合DPI多屏间自动重排。
+说明：[BLE](../docs/PC_BLUETOOTH.md)、[界面](../docs/PC_SWISS_UI.md)、[高清](../docs/PC_HIDPI.md)、[离线分析](../docs/TRACE_ANALYSIS_TEST.md)。
 
-`tests/pc_monitor_test.py` 无需 pyserial、显示器或连接硬件，验证 TRACE 解析、非有限值防护、命令范围和 CSV 字段。GUI、COM 连接及真实数据刷新仍需在电脑和板卡上验证。
+tests/pc_monitor_test.py测试解析和模拟传输；tests/pc_monitor_ui_test.py测试真实Tk控件但不连接硬件。
+tools目录中的screen_*是历史模型筛选脚本，autodebug_*是实验硬件辅助脚本，都不是上位机启动所必需的文件，不会被pc_monitor.py自动运行。
+历史说明保留在docs/history/PC_README_before_github.md。

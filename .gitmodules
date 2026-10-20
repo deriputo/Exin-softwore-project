@@ -1,0 +1,3 @@
+[submodule "Vendor/STM32F10x_StdPeriph_Lib"]
+	path = Vendor/STM32F10x_StdPeriph_Lib
+	url = https://github.com/wajatimur/stm32f10x-stdperiph-lib.git
